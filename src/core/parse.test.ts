@@ -9,8 +9,7 @@ test('parses valid SCSS and returns the root node', () => {
 
   const result = parseScss(source, '/project/a.module.scss');
 
-  expect(result.ok).toBe(true);
-  if (!result.ok) throw new Error('unreachable');
+  expect.assert(result.ok);
   expect(result.root.type).toBe('root');
   expect(result.root.first?.type).toBe('rule');
 });
@@ -47,8 +46,7 @@ test('round-trips the source exactly through stringification', () => {
 
   const result = parseScss(source, '/project/a.module.scss');
 
-  expect(result.ok).toBe(true);
-  if (!result.ok) throw new Error('unreachable');
+  expect.assert(result.ok);
   expect(stringifyScss(result.root)).toBe(source);
 });
 
@@ -59,23 +57,25 @@ test("records the file path on the parsed root's source input", () => {
 
   const result = parseScss(source, '/project/a.module.scss');
 
-  expect(result.ok).toBe(true);
-  if (!result.ok) throw new Error('unreachable');
+  expect.assert(result.ok);
   expect(result.root.source?.input.file).toBe('/project/a.module.scss');
 });
 
 test('returns a diagnostic with 1-based line and column for a syntax error', () => {
+  // The rule with the unclosed block starts at line 2, column 3.
   const source = dedent`
-    .a {
-      color: red;
+    $var: red;
+      .a {
+        color: red;
   `;
 
   const result = parseScss(source, '/project/a.module.scss');
 
-  expect(result.ok).toBe(false);
-  if (result.ok) throw new Error('unreachable');
-  expect(result.diagnostic.file).toBe('/project/a.module.scss');
-  expect(typeof result.diagnostic.line).toBe('number');
-  expect(typeof result.diagnostic.column).toBe('number');
-  expect(result.diagnostic.message).not.toContain('/project/a.module.scss');
+  expect.assert(result.ok === false);
+  expect(result.diagnostic).toEqual({
+    file: '/project/a.module.scss',
+    line: 2,
+    column: 3,
+    message: 'Unclosed block',
+  });
 });

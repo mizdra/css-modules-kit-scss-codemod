@@ -217,10 +217,10 @@ importers:
   .:
     dependencies:
       postcss:
-        specifier: 8.5.16
+        specifier: ^8.5.16
         version: 8.5.16
       postcss-scss:
-        specifier: 4.0.9
+        specifier: ^4.0.9
         version: 4.0.9(postcss@8.5.16)
     devDependencies:
       '@mizdra/oxfmt-config':
