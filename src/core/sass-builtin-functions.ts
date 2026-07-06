@@ -51,8 +51,6 @@ export const OTHER_GLOBAL_ALIASES: ReadonlySet<string> = new Set([
   'map-merge',
   'map-remove',
   'map-values',
-  'ceil',
-  'floor',
   'comparable',
   'percentage',
   'random',
@@ -87,6 +85,14 @@ export const OTHER_GLOBAL_ALIASES: ReadonlySet<string> = new Set([
   'unique-id',
   'unquote',
 ]);
+
+/**
+ * Sass global math functions (no namespace required) that map to a CSS math function:
+ * `ceil()` → `round(up, ...)`, `floor()` → `round(down, ...)`. Convertible by the
+ * `expressions` stage. Unlike global `abs`/`min`/`max`/`round`, which are dual CSS
+ * names and pass through unchanged, these two have no same-name CSS counterpart.
+ */
+export const GLOBAL_MATH_FUNCTIONS: ReadonlySet<string> = new Set(['ceil', 'floor']);
 
 /** `sass:math` functions that map to a CSS math function. Convertible by the `expressions` stage. */
 export const MATH_MODULE_FUNCTIONS: ReadonlySet<string> = new Set([

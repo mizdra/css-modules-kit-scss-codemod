@@ -6,6 +6,7 @@ import {
   CSS_MATH_FUNCTIONS,
   FILTER_SHAPED_COLOR_FUNCTIONS,
   GLOBAL_COLOR_FUNCTIONS,
+  GLOBAL_MATH_FUNCTIONS,
   MATH_MODULE_FUNCTIONS,
   OTHER_GLOBAL_ALIASES,
   RGB_HSL_FUNCTIONS,
@@ -310,6 +311,9 @@ function classifyFunction(
   }
   if (GLOBAL_COLOR_FUNCTIONS.has(nameLower)) {
     return { action: { kind: 'convert', stage: 'colors' }, syntax: nameLower };
+  }
+  if (GLOBAL_MATH_FUNCTIONS.has(nameLower)) {
+    return { action: { kind: 'convert', stage: 'expressions' }, syntax: nameLower };
   }
   if (OTHER_GLOBAL_ALIASES.has(nameLower)) {
     return {
