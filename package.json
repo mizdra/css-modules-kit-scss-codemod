@@ -2,15 +2,18 @@
   "name": "@css-modules-kit/scss-codemod",
   "version": "0.0.0",
   "description": "A collection of codemods for converting SCSS to CSS, for users of the CSS Modules Kit.",
-  "homepage": "https://github.com/author/library#readme",
+  "homepage": "https://github.com/mizdra/css-modules-kit-scss-codemod#readme",
   "bugs": {
-    "url": "https://github.com/author/library/issues"
+    "url": "https://github.com/mizdra/css-modules-kit-scss-codemod/issues"
   },
   "license": "MIT",
   "author": "mizdra <pp.mizdra@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/author/library.git"
+    "url": "git+https://github.com/mizdra/css-modules-kit-scss-codemod.git"
+  },
+  "bin": {
+    "scss-codemod": "./dist/cli.mjs"
   },
   "files": [
     "dist"
