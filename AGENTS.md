@@ -18,3 +18,4 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 # Conventions
 
 - Write pull request titles and descriptions in English.
+- Write test case names and code comments in English.

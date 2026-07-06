@@ -37,6 +37,8 @@
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
+    "dedent": "^1.7.2",
+    "fs-fixture": "^2.14.0",
     "typescript": "^6.0.3",
     "vite": "catalog:",
     "vite-plus": "catalog:"
