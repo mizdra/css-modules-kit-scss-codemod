@@ -1,6 +1,6 @@
 # Scss → CSS 移行ツール (`@css-modules-kit/scss-codemod`) 設計書
 
-- Status: Draft (方針確定、実装着手待ち)
+- Status: 実装中 (M0。進捗は [§13.2](#132-実装チェックリスト-m0) を参照)
 - 対象リポジトリ: `mizdra/css-modules-kit-scss-codemod` (独立リポジトリ)
 - パッケージ名: `@css-modules-kit/scss-codemod`
 - 最終更新: 2026-07-06
@@ -339,6 +339,42 @@ scss-codemod が `&` 連結の脱糖まで行うため ([§6](#6-対応する-sa
 - **変換先方言 validator のテスト**: 標準 PostCSS parser が受理する残存 Sass 構文を reject できることと、プラグイン列の出力が標準 CSS になることを検査する。
 - **verify のテスト**: strict 一致を `pass`、tolerant のみの一致を `review-required`、未評価値の残存を `unsupported`、意図的に非等価なペアを `fail` と判定できることを検査する。偽陰性の防止が信頼性の根幹なので、非等価ペアのコーパスを増やし続ける。
 - dart-sass / postcss プラグインのバージョン更新は Renovate で追従し、フィクスチャで回帰検知。
+
+### 13.2 実装チェックリスト (M0)
+
+M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステップ TDD (探索 → Red → Green → Refactoring)、PR は draft で作成する。完了したステップはチェックを付け、commit hash を記録する。
+
+実装上の決定事項:
+
+- resolver は **oxc-resolver** (Sass の partial 慣習 `_x.scss`・拡張子省略・`_index.scss` の candidate 展開は自前実装)
+- CLI の引数パースは **`node:util` の parseArgs** (依存ゼロ)
+- bin 名は **`scss-codemod`**
+- テストは `tests/` ではなく source と同階層 (`src/path/to/file.test.ts`) に置く
+- `runCli(argv, { stdout, stderr })` は Node.js の writable stream を受け取って書き込み、exit code (number) を返す
+
+#### PR1: 基盤 + analyze (ブランチ: `m0-cli-skeleton`)
+
+- [x] **Step 1: パッケージ準備 + CLI 骨格** — bin 追加、parseArgs によるコマンド分岐 (analyze / convert / verify / todo)、stage テーブル (名前 × マイルストーン)、exit code 規約 (0 = 成功 / 1 = 未実装・診断ありで失敗 / 2 = 使い方エラー)。全コマンドは未実装スタブ (846aa4b)
+- [ ] **Step 2: core/collect + core/diagnostic** — tinyglobby による glob 収集、`--exclude`、`node_modules` 常時除外。`Diagnostic` 型 (file/line/column/syntax/milestone/message/hint) と人間向け・JSON 整形
+- [ ] **Step 3: core/parse** — postcss-scss ラッパ。パース失敗の Diagnostic 化。postcss / postcss-scss を exact version で dependencies に追加 ([§5.1](#51-パーサー構成))
+- [ ] **Step 4: core/subset (whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-部分集合) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知
+- [ ] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → Sass candidate 展開 → oxc-resolver で解決。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成))
+- [ ] **Step 6: core/partial** — partial 分類 (definition-only / style-emitting / mixed。[§9.1](#91-partial-の検出と分類))
+- [ ] **Step 7: core/sass-compile** — dart-sass (`sass` を exact version で追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定
+- [ ] **Step 8: commands/analyze 統合** — Step 2–7 を組み合わせ、人間向け出力と `--json` を実装。project fixture (複数ファイル構成) による e2e テスト
+
+#### PR2: Phase 1 stages
+
+- [ ] **Step 9: core/write** — アトミック書き込み (メモリ上で全件成功 → 同一ディレクトリの temp file 経由で置換 → I/O エラー時は best-effort ロールバック。[§7](#7-cli-設計))。atomicity のテスト ([§13.1](#131-テスト戦略))
+- [ ] **Step 10: `comments` stage** — `//` → `/* */` (postcss-scss の inline comment)。コメント内に `*/` を含む場合の扱いをテストで固定
+- [ ] **Step 11: `at-statements` stage** — `@error`/`@warn`/`@debug` を除去し、内容をログへ
+- [ ] **Step 12: `nesting` stage** — `&` 連結を含む rule のみ最小範囲で脱糖 (セレクタ解析は postcss-selector-parser、親が複数セレクタなら積展開、連結 + interpolation はエラー)。dart-sass 前後比較の機械検証つき ([§8.1](#81-stage-一覧))
+
+#### PR3: to-css + todo
+
+- [ ] **Step 13: dialect-validator** — 変換先 PostCSS 方言の whitelist 検査 + プラグイン列 (postcss-mixins → simple-vars → nested) の実行結果が標準 CSS としてパースできることの確認 ([§8.3](#83-precondition-検査とエラー処理))
+- [ ] **Step 14: `to-css` stage** — precondition (Step 13 に合格) → `.module.scss`→`.module.css`・`_x.scss`→`x.css` リネーム → TS/JS の import specifier 書き換え → ビルド設定切替の案内
+- [ ] **Step 15: `todo` コマンド** — 変換できない箇所の位置・構文名・理由・手動変換ヒントを markdown プロンプト形式と `--json` で出力 ([§11](#11-todo-変換できない箇所の洗い出し))
 
 ## 14. 参考一次情報
 
