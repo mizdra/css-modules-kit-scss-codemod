@@ -160,3 +160,19 @@ export const CSS_MATH_FUNCTIONS: ReadonlySet<string> = new Set([
 
 /** Sass color functions whose single-argument form is plain CSS (filter), rejected only when it isn't a plain literal. */
 export const FILTER_SHAPED_COLOR_FUNCTIONS: ReadonlySet<string> = new Set(['invert', 'opacity', 'grayscale']);
+
+/**
+ * Whether a bare (non-namespaced) function name is a Sass-evaluated builtin: dart-sass
+ * computes the call to a value at compile time, so an adjacent `/` is Sass division.
+ * CSS whitelist functions (`var`, `calc`, ...) and unknown functions are NOT included —
+ * dart-sass passes the slash through untouched when the operands aren't Sass numbers.
+ */
+export function isSassEvaluatedFunctionName(nameLower: string): boolean {
+  return (
+    GLOBAL_COLOR_FUNCTIONS.has(nameLower) ||
+    GLOBAL_MATH_FUNCTIONS.has(nameLower) ||
+    OTHER_GLOBAL_ALIASES.has(nameLower) ||
+    nameLower === 'mix' ||
+    nameLower === 'if'
+  );
+}

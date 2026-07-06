@@ -1,6 +1,6 @@
 import type { AtRule, Declaration, Root } from 'postcss';
 import valueParser from 'postcss-value-parser';
-import { findStage } from '../stages.ts';
+import { findStage, type StageName } from '../stages.ts';
 import { classifySelector } from './classify-selector.ts';
 import {
   classifyInterpolationOnly,
@@ -15,7 +15,7 @@ import type { Diagnostic, DiagnosticMilestone } from './diagnostic.ts';
 
 /** What to do with a Sass construct: convert it via a stage, or reject it (whitelist mismatch). */
 export type SyntaxAction =
-  | { readonly kind: 'convert'; readonly stage: string }
+  | { readonly kind: 'convert'; readonly stage: StageName }
   | { readonly kind: 'unsupported'; readonly milestone: 'M3' | 'never'; readonly hint?: string };
 
 export interface SyntaxFinding {
@@ -84,7 +84,7 @@ function pushConvertAtNode(
   file: string,
   node: { source?: { start?: { line: number; column: number } } },
   syntax: string,
-  stage: string,
+  stage: StageName,
 ): void {
   const position = nodeStart(node);
   findings.push({ file, line: position.line, column: position.column, syntax, action: { kind: 'convert', stage } });

@@ -8,6 +8,7 @@ import {
   FILTER_SHAPED_COLOR_FUNCTIONS,
   GLOBAL_COLOR_FUNCTIONS,
   GLOBAL_MATH_FUNCTIONS,
+  isSassEvaluatedFunctionName,
   MATH_MODULE_FUNCTIONS,
   OTHER_GLOBAL_ALIASES,
   RGB_HSL_FUNCTIONS,
@@ -172,7 +173,11 @@ function nearestNonSpaceSibling(
 function isSassEvaluatedOperand(node: valueParser.Node | undefined): boolean {
   if (!node) return false;
   if (node.type === 'word') return node.value.includes('$');
-  if (node.type === 'function') return true; // covers both named calls and `(...)` grouping
+  if (node.type === 'function') {
+    if (node.value === '') return true; // `(...)` grouping — a Sass parenthesized expression
+    if (node.value.includes('.')) return true; // namespaced call, evaluated by Sass
+    return isSassEvaluatedFunctionName(node.value.toLowerCase());
+  }
   return false;
 }
 

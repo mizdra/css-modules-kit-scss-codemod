@@ -52,6 +52,10 @@ describe('no findings for constructs kept as-is', () => {
     expect(findings('.a { grid-row: 1 / 3; }\n')).toEqual([]);
   });
 
+  test('produces no findings for a slash between CSS function calls', () => {
+    expect(findings('.a { aspect-ratio: var(--w) / var(--h); }\n')).toEqual([]);
+  });
+
   test('produces no findings for plain-CSS @import forms (url(), .css specifier, trailing media query)', () => {
     const source = dedent`
       @import url('x.css');
@@ -150,6 +154,24 @@ describe('convert findings', () => {
     ]);
   });
 
+  test('classifies `&` concatenation inside a functional pseudo-class', () => {
+    const source = dedent`
+      .a {
+        &:not(&_active) { color: red; }
+      }
+    `;
+
+    expect(findings(source)).toEqual([
+      {
+        file: FILE,
+        line: 2,
+        column: 9,
+        syntax: 'selector concatenation',
+        action: { kind: 'convert', stage: 'nesting' },
+      },
+    ]);
+  });
+
   test('classifies spaced and unspaced Sass addition as convertible by the expressions stage', () => {
     expect(findings('.a { width: $a + $b; }\n')).toEqual([
       { file: FILE, line: 1, column: 16, syntax: 'arithmetic', action: { kind: 'convert', stage: 'expressions' } },
@@ -198,6 +220,13 @@ describe('convert findings', () => {
     expect(findings('.a { height: floor($x / 2); }\n')).toEqual([
       { file: FILE, line: 1, column: 14, syntax: 'floor', action: { kind: 'convert', stage: 'expressions' } },
       { file: FILE, line: 1, column: 22, syntax: 'division', action: { kind: 'convert', stage: 'expressions' } },
+    ]);
+  });
+
+  test('classifies a slash next to a Sass-evaluated function call as division', () => {
+    expect(findings('.a { width: floor($x) / 2; }\n')).toEqual([
+      { file: FILE, line: 1, column: 13, syntax: 'floor', action: { kind: 'convert', stage: 'expressions' } },
+      { file: FILE, line: 1, column: 23, syntax: 'division', action: { kind: 'convert', stage: 'expressions' } },
     ]);
   });
 
@@ -287,6 +316,15 @@ describe('convert findings', () => {
     ]);
     expect(findings('@keyframes #{$n} {\n  from { opacity: 0; }\n}\n')).toEqual([
       { file: FILE, line: 1, column: 12, syntax: 'interpolation', action: { kind: 'convert', stage: 'interpolation' } },
+    ]);
+  });
+
+  test('classifies interpolation inside an attribute selector (value and name)', () => {
+    expect(findings('.a[data-state="#{$state}"] { color: red; }\n')).toEqual([
+      { file: FILE, line: 1, column: 16, syntax: 'interpolation', action: { kind: 'convert', stage: 'interpolation' } },
+    ]);
+    expect(findings('[data-#{$name}] { color: red; }\n')).toEqual([
+      { file: FILE, line: 1, column: 7, syntax: 'interpolation', action: { kind: 'convert', stage: 'interpolation' } },
     ]);
   });
 
@@ -449,6 +487,18 @@ describe('unsupported findings', () => {
         file: FILE,
         line: 1,
         column: 1,
+        syntax: 'placeholder selector',
+        action: { kind: 'unsupported', milestone: 'never' },
+      },
+    ]);
+  });
+
+  test('rejects a placeholder selector inside a functional pseudo-class', () => {
+    expect(findings(':is(%foo) { color: red; }\n')).toEqual([
+      {
+        file: FILE,
+        line: 1,
+        column: 5,
         syntax: 'placeholder selector',
         action: { kind: 'unsupported', milestone: 'never' },
       },

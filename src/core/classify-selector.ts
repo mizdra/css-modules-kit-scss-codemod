@@ -9,14 +9,27 @@ function isSingleVariableBody(body: string): boolean {
   return SINGLE_VARIABLE_BODY.test(body.trim());
 }
 
-/** Whether `index` falls inside a `[...]` attribute selector in `raw` (attribute values are literal, not interpolation). */
-function isInsideAttributeSelector(raw: string, index: number): boolean {
-  let depth = 0;
-  for (let i = 0; i < index; i++) {
-    if (raw[i] === '[') depth++;
-    else if (raw[i] === ']') depth--;
-  }
-  return depth > 0;
+/**
+ * Collects every `selector` container: the top-level ones plus those nested inside
+ * functional pseudo-classes (`:is(...)`, `:not(...)`, ...), recursively — placeholder and
+ * concatenation checks must not be escapable by wrapping in a pseudo. `sourceIndex` values
+ * inside pseudos are absolute within the selector string (verified empirically), so
+ * position math is identical at every depth.
+ */
+function collectSelectorContainers(root: selectorParser.Root): selectorParser.Selector[] {
+  const containers: selectorParser.Selector[] = [];
+  const visit = (selector: selectorParser.Selector): void => {
+    containers.push(selector);
+    for (const node of selector.nodes) {
+      if (node.type === 'pseudo') {
+        for (const child of node.nodes) visit(child);
+      }
+    }
+  };
+  root.each((selector) => {
+    visit(selector);
+  });
+  return containers;
 }
 
 interface ConcatenationPair {
@@ -73,12 +86,12 @@ export function classifySelector(rule: Rule, file: string): SyntaxFinding[] {
   }
 
   const findings: SyntaxFinding[] = [];
-  const spans = findInterpolationSpans(rule.selector).filter(
-    (span) => !isInsideAttributeSelector(rule.selector, span.start),
-  );
+  // Sass evaluates interpolation everywhere in a selector, including inside attribute
+  // selectors (`[data-state="#{$state}"]`), so no span is excluded from classification.
+  const spans = findInterpolationSpans(rule.selector);
   const consumed = new Set<InterpolationSpan>();
 
-  root.each((selectorNode) => {
+  for (const selectorNode of collectSelectorContainers(root)) {
     const nodes = selectorNode.nodes;
     nodes.forEach((node) => {
       if (node.type === 'tag' && node.value.startsWith('%')) {
@@ -126,7 +139,7 @@ export function classifySelector(rule: Rule, file: string): SyntaxFinding[] {
         });
       }
     }
-  });
+  }
 
   for (const span of spans) {
     if (consumed.has(span)) continue;
