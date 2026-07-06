@@ -215,6 +215,13 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      postcss:
+        specifier: ^8.5.16
+        version: 8.5.16
+      postcss-scss:
+        specifier: ^4.0.9
+        version: 4.0.9(postcss@8.5.16)
     devDependencies:
       '@mizdra/oxfmt-config':
         specifier: ^0.2.0
@@ -1027,6 +1034,12 @@ packages:
     resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
     engines: {node: '>=14.19.0'}
 
+  postcss-scss@4.0.9:
+    resolution: {integrity: sha512-AjKOeiwAitL/MXxQW2DliT28EKukvvbEWx3LBmJIRN8KfBGZbRTxNYW0kSqi1COiTZ57nZ9NW06S6ux//N1c9A==}
+    engines: {node: '>=12.0'}
+    peerDependencies:
+      postcss: ^8.4.29
+
   postcss@8.5.16:
     resolution: {integrity: sha512-vuwillviilfKZsg0VGj5R/YwwcHx4SLsIOI/7K6mQkWx+l5cUHTjj5g0AasTBcyXsbfTgrwsUNmVUb5xVwyPwg==}
     engines: {node: ^10 || ^12 || >=14}
@@ -1707,6 +1720,10 @@ snapshots:
   picomatch@4.0.5: {}
 
   pngjs@7.0.0: {}
+
+  postcss-scss@4.0.9(postcss@8.5.16):
+    dependencies:
+      postcss: 8.5.16
 
   postcss@8.5.16:
     dependencies:

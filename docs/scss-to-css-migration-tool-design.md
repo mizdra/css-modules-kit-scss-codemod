@@ -89,7 +89,7 @@ CSS は描画に直結するため、**移行の安全性を最重視する**。
 
 **sass-parser (dart-sass 公式の PostCSS 互換パーサー) は不採用**。npm README に "not yet suitable for production use (...) does not yet support parsing raws (...) unsuitable for certain source-to-source transformations" と明記されているため ([npm: sass-parser](https://www.npmjs.com/package/sass-parser))。
 
-dart-sass、resolver、各 postcss プラグインは dependencies に固定バージョンで持ち、レポートに記録する。
+dart-sass、resolver、各 postcss プラグインは dependencies (`^x.y.z`) に持ち、実際に解決されたバージョンをレポートに記録する。
 
 module graph は、対象 glob に含まれる各ファイルの AST から `@use`・`@forward`・Sass `@import` を抽出し、bundler-compatible resolver で specifier を解決して importer から imported への edge を構築する。resolver の実装と設定はレポートに記録する。対象 glob の範囲外、`--exclude` に一致する、または `node_modules` 配下にある参照先は graph 上に存在しないものとして無視し、そのファイルを解析・変換しない。
 
@@ -356,11 +356,11 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 
 - [x] **Step 1: パッケージ準備 + CLI 骨格** — bin 追加、parseArgs によるコマンド分岐 (analyze / convert / verify / todo)、stage テーブル (名前 × マイルストーン)、exit code 規約 (0 = 成功 / 1 = 未実装・診断ありで失敗 / 2 = 使い方エラー)。全コマンドは未実装スタブ (846aa4b)
 - [x] **Step 2: core/collect + core/diagnostic** — `node:fs/promises` の `glob` による glob 収集、`--exclude`、`node_modules` 常時除外。`Diagnostic` 型 (file/line/column/syntax/milestone/message/hint) と人間向け・JSON 整形 (8c8413f, 2d1ee9d)
-- [ ] **Step 3: core/parse** — postcss-scss ラッパ。パース失敗の Diagnostic 化。postcss / postcss-scss を exact version で dependencies に追加 ([§5.1](#51-パーサー構成))
+- [x] **Step 3: core/parse** — postcss-scss ラッパ。パース失敗の Diagnostic 化。postcss / postcss-scss を dependencies に追加 ([§5.1](#51-パーサー構成)) (26ac783)
 - [ ] **Step 4: core/subset (whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-部分集合) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知
 - [ ] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → Sass candidate 展開 → oxc-resolver で解決。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成))
 - [ ] **Step 6: core/partial** — partial 分類 (definition-only / style-emitting / mixed。[§9.1](#91-partial-の検出と分類))
-- [ ] **Step 7: core/sass-compile** — dart-sass (`sass` を exact version で追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定
+- [ ] **Step 7: core/sass-compile** — dart-sass (`sass` を dependencies に追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定
 - [ ] **Step 8: commands/analyze 統合** — Step 2–7 を組み合わせ、人間向け出力と `--json` を実装。project fixture (複数ファイル構成) による e2e テスト
 
 #### PR2: Phase 1 stages
