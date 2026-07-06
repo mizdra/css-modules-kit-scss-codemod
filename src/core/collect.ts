@@ -1,5 +1,5 @@
-import { glob } from "node:fs/promises";
-import { resolve } from "node:path";
+import { glob } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 export interface CollectOptions {
   readonly cwd: string;
@@ -7,11 +7,8 @@ export interface CollectOptions {
 }
 
 /** Collects files matching the given glob patterns. Always excludes node_modules. */
-export async function collectFiles(
-  patterns: readonly string[],
-  options: CollectOptions,
-): Promise<string[]> {
-  const exclude = ["**/node_modules/**", ...(options.exclude ?? [])];
+export async function collectFiles(patterns: readonly string[], options: CollectOptions): Promise<string[]> {
+  const exclude = ['**/node_modules/**', ...(options.exclude ?? [])];
 
   const files: string[] = [];
   for await (const entry of glob(patterns, {

@@ -1,6 +1,6 @@
-import { parseArgs } from "node:util";
+import { parseArgs } from 'node:util';
 
-type OptionSpec = Record<string, { type: "string" | "boolean"; multiple?: boolean }>;
+type OptionSpec = Record<string, { type: 'string' | 'boolean'; multiple?: boolean }>;
 
 export interface ParsedCommandArgs {
   readonly ok: true;

@@ -222,7 +222,7 @@ stage の適用は対象範囲全体でアトミックとする。対象ファ�
 ```scss
 /* before: _theme.scss */ /* before: button.module.scss */
 $primary: #0066ff;
-@use "./theme" as t;
+@use './theme' as t;
 @mixin focus {
   outline: 2px solid $primary;
 }
@@ -235,7 +235,7 @@ $primary: #0066ff;
 ```css
 /* after: theme.css */ /* after: button.module.css */
 $primary: #0066ff;
-@import "./theme.css";
+@import './theme.css';
 @define-mixin focus {
   outline: 2px solid $primary;
 }

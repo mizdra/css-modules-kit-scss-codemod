@@ -216,6 +216,12 @@ importers:
 
   .:
     devDependencies:
+      '@mizdra/oxfmt-config':
+        specifier: ^0.2.0
+        version: 0.2.0(oxfmt@0.57.0(vite-plus@0.2.2(@types/node@25.9.4)(@voidzero-dev/vite-plus-core@0.2.2(@types/node@25.9.4)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0)))
+      '@mizdra/oxlint-config':
+        specifier: ^0.5.0
+        version: 0.5.0(oxlint-tsgolint@0.24.0)(oxlint@1.72.0(oxlint-tsgolint@0.24.0)(vite-plus@0.2.2(@types/node@25.9.4)(@voidzero-dev/vite-plus-core@0.2.2(@types/node@25.9.4)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0)))
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.4
@@ -260,6 +266,17 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@mizdra/oxfmt-config@0.2.0':
+    resolution: {integrity: sha512-7SlDOebqnNrhtFanij9DdvGOy3yDq+560qItT/flC56tFcAsnPgOVDId2DLwh/YH1Ds8GH9g2BuFEzEov91M8A==}
+    peerDependencies:
+      oxfmt: '>=0.41.0'
+
+  '@mizdra/oxlint-config@0.5.0':
+    resolution: {integrity: sha512-ign/Dwkjlj/uphNMpU9Y0reGcXCSDhcE2TB+kDTAdPoEWUZOyYkapif5lPNAUq/vv9GpJmJUs06Y6tsZG70nsQ==}
+    peerDependencies:
+      oxlint: '>=1.63.0'
+      oxlint-tsgolint: '>=0.22.1'
 
   '@oxc-project/runtime@0.138.0':
     resolution: {integrity: sha512-yHhoXsN8tYxgdJCdD91PbySNjEEaBX/tH2OQRDXJpsQv5b184oC4/qVbU7qlblvfil/JP15Lh2HW7+HN5DS90Q==}
@@ -1174,6 +1191,16 @@ snapshots:
   '@blazediff/core@1.9.1': {}
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@mizdra/oxfmt-config@0.2.0(oxfmt@0.57.0(vite-plus@0.2.2(@types/node@25.9.4)(@voidzero-dev/vite-plus-core@0.2.2(@types/node@25.9.4)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0)))':
+    dependencies:
+      oxfmt: 0.57.0(vite-plus@0.2.2(@types/node@25.9.4)(@voidzero-dev/vite-plus-core@0.2.2(@types/node@25.9.4)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))
+
+  '@mizdra/oxlint-config@0.5.0(oxlint-tsgolint@0.24.0)(oxlint@1.72.0(oxlint-tsgolint@0.24.0)(vite-plus@0.2.2(@types/node@25.9.4)(@voidzero-dev/vite-plus-core@0.2.2(@types/node@25.9.4)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0)))':
+    dependencies:
+      '@oxlint/plugins': 1.68.0
+      oxlint: 1.72.0(oxlint-tsgolint@0.24.0)(vite-plus@0.2.2(@types/node@25.9.4)(@voidzero-dev/vite-plus-core@0.2.2(@types/node@25.9.4)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))
+      oxlint-tsgolint: 0.24.0
 
   '@oxc-project/runtime@0.138.0': {}
 

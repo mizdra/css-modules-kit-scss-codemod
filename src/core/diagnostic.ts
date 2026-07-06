@@ -1,5 +1,5 @@
 /** When conversion support for the syntax is planned. "never" means no support is planned. */
-export type DiagnosticMilestone = "M0" | "M1" | "M2" | "M3" | "never";
+export type DiagnosticMilestone = 'M0' | 'M1' | 'M2' | 'M3' | 'never';
 
 export interface Diagnostic {
   /** Path of the file the diagnostic points at. */
@@ -24,7 +24,7 @@ function formatLocation(diagnostic: Diagnostic): string {
 }
 
 function formatMilestone(milestone: DiagnosticMilestone): string {
-  return milestone === "never" ? "no support planned" : `planned: ${milestone}`;
+  return milestone === 'never' ? 'no support planned' : `planned: ${milestone}`;
 }
 
 function formatSuffix(diagnostic: Diagnostic): string {
@@ -38,23 +38,23 @@ function formatSuffix(diagnostic: Diagnostic): string {
   if (milestone !== undefined) {
     return ` [${formatMilestone(milestone)}]`;
   }
-  return "";
+  return '';
 }
 
 function formatDiagnostic(diagnostic: Diagnostic): string {
   const location = formatLocation(diagnostic);
   const suffix = formatSuffix(diagnostic);
-  const hintLine = diagnostic.hint === undefined ? "" : `\n  hint: ${diagnostic.hint}`;
+  const hintLine = diagnostic.hint === undefined ? '' : `\n  hint: ${diagnostic.hint}`;
   return `${location}: ${diagnostic.message}${suffix}${hintLine}`;
 }
 
 /** Formats diagnostics for human consumption, one entry per diagnostic. */
 export function formatDiagnostics(diagnostics: readonly Diagnostic[]): string {
-  if (diagnostics.length === 0) return "";
-  return diagnostics.map(formatDiagnostic).join("\n") + "\n";
+  if (diagnostics.length === 0) return '';
+  return `${diagnostics.map(formatDiagnostic).join('\n')}\n`;
 }
 
 /** Formats diagnostics as pretty-printed JSON (an array of Diagnostic objects). */
 export function formatDiagnosticsAsJson(diagnostics: readonly Diagnostic[]): string {
-  return JSON.stringify(diagnostics, null, 2) + "\n";
+  return `${JSON.stringify(diagnostics, null, 2)}\n`;
 }
