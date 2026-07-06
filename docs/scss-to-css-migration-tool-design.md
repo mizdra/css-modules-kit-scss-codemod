@@ -351,13 +351,14 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 - bin 名は **`scss-codemod`**
 - テストは `tests/` ではなく source と同階層 (`src/path/to/file.test.ts`) に置く
 - `runCli(argv, { stdout, stderr })` は Node.js の writable stream を受け取って書き込み、exit code (number) を返す
+- 未知の関数名の分類は **CSS whitelist 方式** (fail-closed の徹底)。[css-functions-list](https://www.npmjs.com/package/css-functions-list) (stylelint の `function-no-unknown` が使用) を CSS 関数の whitelist とし、dart-sass 組み込み (global alias 全列挙 + namespace 解決) にも CSS whitelist にも該当しない関数名はエラー (todo 対象)。CSS と Sass の両義名 (`rgba`/`min`/`if`/`invert` 等) は引数の形で判別し、判別できないものはエラー
 
 #### PR1: 基盤 + analyze (ブランチ: `m0-cli-skeleton`)
 
 - [x] **Step 1: パッケージ準備 + CLI 骨格** — bin 追加、parseArgs によるコマンド分岐 (analyze / convert / verify / todo)、stage テーブル (名前 × マイルストーン)、exit code 規約 (0 = 成功 / 1 = 未実装・診断ありで失敗 / 2 = 使い方エラー)。全コマンドは未実装スタブ (846aa4b)
 - [x] **Step 2: core/collect + core/diagnostic** — `node:fs/promises` の `glob` による glob 収集、`--exclude`、`node_modules` 常時除外。`Diagnostic` 型 (file/line/column/syntax/milestone/message/hint) と人間向け・JSON 整形 (8c8413f, 2d1ee9d)
 - [x] **Step 3: core/parse** — postcss-scss ラッパ。パース失敗の Diagnostic 化。postcss / postcss-scss を dependencies に追加 ([§5.1](#51-パーサー構成)) (26ac783)
-- [ ] **Step 4: core/subset (whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-部分集合) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知
+- [x] **Step 4: core/subset (whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-部分集合) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知 (c67d801)
 - [ ] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → Sass candidate 展開 → oxc-resolver で解決。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成))
 - [ ] **Step 6: core/partial** — partial 分類 (definition-only / style-emitting / mixed。[§9.1](#91-partial-の検出と分類))
 - [ ] **Step 7: core/sass-compile** — dart-sass (`sass` を dependencies に追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定
