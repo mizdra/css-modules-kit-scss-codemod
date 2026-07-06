@@ -1,7 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { formatDiagnostics, formatDiagnosticsAsJson } from "./diagnostic.ts";
 
-test("全フィールドありの diagnostic を位置・構文・milestone・hint 込みで整形する", () => {
+test("formats a diagnostic with location, syntax, milestone, and hint", () => {
   const output = formatDiagnostics([
     {
       file: "a.module.scss",
@@ -19,13 +19,13 @@ test("全フィールドありの diagnostic を位置・構文・milestone・hi
   );
 });
 
-test("line/column なしの diagnostic を file: message 形式で整形する", () => {
+test("formats a diagnostic without line/column as file: message", () => {
   const output = formatDiagnostics([{ file: "a.module.scss", message: "Failed to compile." }]);
 
   expect(output).toBe("a.module.scss: Failed to compile.\n");
 });
 
-test("milestone が never のとき no support planned と表示する", () => {
+test("shows no support planned when milestone is never", () => {
   const output = formatDiagnostics([
     {
       file: "a.module.scss",
@@ -42,7 +42,7 @@ test("milestone が never のとき no support planned と表示する", () => {
   );
 });
 
-test("milestone が never 以外のとき planned: <milestone> と表示する", () => {
+test("shows planned: <milestone> when milestone is not never", () => {
   const output = formatDiagnostics([
     {
       file: "a.module.scss",
@@ -59,7 +59,7 @@ test("milestone が never 以外のとき planned: <milestone> と表示する",
   );
 });
 
-test("syntax のみ、milestone のみのとき角括弧内をそれぞれの内容だけにする", () => {
+test("shows only the given field in brackets when only syntax or only milestone is set", () => {
   const syntaxOnly = formatDiagnostics([
     { file: "a.module.scss", line: 1, column: 1, syntax: "@extend", message: "msg" },
   ]);
@@ -76,13 +76,13 @@ test("syntax のみ、milestone のみのとき角括弧内をそれぞれの内
   expect(milestoneOnlyNever).toBe("a.module.scss:1:1: msg [no support planned]\n");
 });
 
-test("省略可能フィールドがすべてないとき message だけを整形する", () => {
+test("formats only the message when all optional fields are absent", () => {
   const output = formatDiagnostics([{ file: "a.module.scss", message: "Failed to compile." }]);
 
   expect(output).toBe("a.module.scss: Failed to compile.\n");
 });
 
-test("複数の diagnostics を改行区切りで整形する", () => {
+test("formats multiple diagnostics separated by newlines", () => {
   const output = formatDiagnostics([
     { file: "a.module.scss", line: 1, column: 1, message: "first" },
     { file: "b.module.scss", line: 2, column: 2, message: "second" },
@@ -91,11 +91,11 @@ test("複数の diagnostics を改行区切りで整形する", () => {
   expect(output).toBe("a.module.scss:1:1: first\nb.module.scss:2:2: second\n");
 });
 
-test("0 件のとき空文字列を返す", () => {
+test("returns an empty string when there are no diagnostics", () => {
   expect(formatDiagnostics([])).toBe("");
 });
 
-test("JSON 整形で省略フィールドが出力されない", () => {
+test("omits absent optional fields from JSON formatting", () => {
   const output = formatDiagnosticsAsJson([
     { file: "a.module.scss", message: "Failed to compile." },
   ]);
