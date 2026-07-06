@@ -1,6 +1,6 @@
 /**
  * Data tables for classifying dart-sass builtin functions against the PostCSS-dialect
- * whitelist (design doc §6.1). Shape/branching logic lives in `subset-value.ts`; this
+ * whitelist (design doc §6.1). Shape/branching logic lives in `classify-value.ts`; this
  * module only holds the name → category mapping.
  */
 

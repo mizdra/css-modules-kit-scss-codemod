@@ -1,14 +1,14 @@
 import dedent from 'dedent';
 import { describe, expect, test } from 'vite-plus/test';
+import { classifySyntax, syntaxFindingToDiagnostic } from './classify.ts';
 import { parseScss } from './parse.ts';
-import { analyzeSubset, subsetFindingToDiagnostic } from './subset.ts';
 
 const FILE = '/project/a.module.scss';
 
 function findings(source: string, file = FILE) {
   const result = parseScss(source, file);
   expect.assert(result.ok);
-  return analyzeSubset(result.root, file);
+  return classifySyntax(result.root, file);
 }
 
 describe('no findings for constructs kept as-is', () => {
@@ -786,9 +786,9 @@ describe('multiple findings in one file', () => {
   });
 });
 
-describe('subsetFindingToDiagnostic', () => {
+describe('syntaxFindingToDiagnostic', () => {
   test('converts a convert finding to a Diagnostic using the stage milestone from STAGES', () => {
-    const diagnostic = subsetFindingToDiagnostic({
+    const diagnostic = syntaxFindingToDiagnostic({
       file: FILE,
       line: 1,
       column: 1,
@@ -807,7 +807,7 @@ describe('subsetFindingToDiagnostic', () => {
   });
 
   test('converts an unsupported finding with a hint to a Diagnostic', () => {
-    const diagnostic = subsetFindingToDiagnostic({
+    const diagnostic = syntaxFindingToDiagnostic({
       file: FILE,
       line: 2,
       column: 3,

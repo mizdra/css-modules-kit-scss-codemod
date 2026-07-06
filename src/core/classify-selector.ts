@@ -1,7 +1,7 @@
 import type { Rule } from 'postcss';
 import selectorParser from 'postcss-selector-parser';
-import { findInterpolationSpans, type InterpolationSpan, sortByPosition } from './subset-value.ts';
-import type { SubsetFinding } from './subset.ts';
+import { findInterpolationSpans, type InterpolationSpan, sortByPosition } from './classify-value.ts';
+import type { SyntaxFinding } from './classify.ts';
 
 const SINGLE_VARIABLE_BODY = /^\$[\w-]+$/u;
 
@@ -48,13 +48,13 @@ function tagRange(pair: ConcatenationPair): { readonly start: number; readonly e
 }
 
 /**
- * Selector-level check (design doc §6). Parses `rule.selector` with postcss-selector-parser,
+ * Selector-level classification (design doc §6). Parses `rule.selector` with postcss-selector-parser,
  * which tolerates `#{...}` interpolation. Interpolation positions are computed from a raw
  * brace-counting scan of `rule.selector` (shared with the value-level pass 1), not from
  * postcss-selector-parser's `sourceIndex`, because that index is corrupted for any node
  * whose text contains `#{` (verified empirically against postcss-selector-parser@7.1.4).
  */
-export function checkSelector(rule: Rule, file: string): SubsetFinding[] {
+export function classifySelector(rule: Rule, file: string): SyntaxFinding[] {
   const start = rule.source?.start;
 
   let root: selectorParser.Root;
@@ -72,7 +72,7 @@ export function checkSelector(rule: Rule, file: string): SubsetFinding[] {
     ];
   }
 
-  const findings: SubsetFinding[] = [];
+  const findings: SyntaxFinding[] = [];
   const spans = findInterpolationSpans(rule.selector).filter(
     (span) => !isInsideAttributeSelector(rule.selector, span.start),
   );

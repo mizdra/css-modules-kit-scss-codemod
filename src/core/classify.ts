@@ -1,30 +1,30 @@
 import type { AtRule, Declaration, Root } from 'postcss';
 import valueParser from 'postcss-value-parser';
 import { findStage } from '../stages.ts';
-import type { Diagnostic, DiagnosticMilestone } from './diagnostic.ts';
-import { checkSelector } from './subset-selector.ts';
+import { classifySelector } from './classify-selector.ts';
 import {
-  checkInterpolationOnly,
-  checkValue,
+  classifyInterpolationOnly,
+  classifyValue,
   extractParenArgs,
   findInterpolationSpans,
   maskInterpolationSpans,
   type NamespaceMap,
   type ResolvedNamespace,
-} from './subset-value.ts';
+} from './classify-value.ts';
+import type { Diagnostic, DiagnosticMilestone } from './diagnostic.ts';
 
 /** What to do with a Sass construct: convert it via a stage, or reject it (whitelist mismatch). */
-export type SubsetAction =
+export type SyntaxAction =
   | { readonly kind: 'convert'; readonly stage: string }
   | { readonly kind: 'unsupported'; readonly milestone: 'M3' | 'never'; readonly hint?: string };
 
-export interface SubsetFinding {
+export interface SyntaxFinding {
   readonly file: string;
   readonly line: number | undefined;
   readonly column: number | undefined;
   /** Name of the Sass construct, e.g. `'@extend'`, `'silent comment'`, `'map/list value'`. */
   readonly syntax: string;
-  readonly action: SubsetAction;
+  readonly action: SyntaxAction;
 }
 
 const SINGLE_VARIABLE_BODY = /^\$[\w-]+$/u;
@@ -62,7 +62,7 @@ function nodeStart(node: { source?: { start?: { line: number; column: number } }
 }
 
 function pushUnsupportedAtNode(
-  findings: SubsetFinding[],
+  findings: SyntaxFinding[],
   file: string,
   node: { source?: { start?: { line: number; column: number } } },
   syntax: string,
@@ -80,7 +80,7 @@ function pushUnsupportedAtNode(
 }
 
 function pushConvertAtNode(
-  findings: SubsetFinding[],
+  findings: SyntaxFinding[],
   file: string,
   node: { source?: { start?: { line: number; column: number } } },
   syntax: string,
@@ -115,12 +115,12 @@ function atRuleParamsOffset(atrule: AtRule): number {
   return 1 + atrule.name.length + (atrule.raws.afterName ?? ' ').length;
 }
 
-function checkDeclValue(decl: Declaration, file: string, namespaces: NamespaceMap): SubsetFinding[] {
-  return checkValue(decl.value, { file, node: decl, baseOffset: declValueOffset(decl), namespaces });
+function classifyDeclValue(decl: Declaration, file: string, namespaces: NamespaceMap): SyntaxFinding[] {
+  return classifyValue(decl.value, { file, node: decl, baseOffset: declValueOffset(decl), namespaces });
 }
 
 /** Classifies interpolation in a declaration's property name (e.g. `prop-#{$n}: v;`). One finding for the whole prop. */
-function classifyPropInterpolation(decl: Declaration, file: string): SubsetFinding {
+function classifyPropInterpolation(decl: Declaration, file: string): SyntaxFinding {
   const spans = findInterpolationSpans(decl.prop);
   const allSimple = spans.every((span) => isSingleVariableBody(span.body));
   const position = nodeStart(decl);
@@ -145,7 +145,7 @@ function classifyPropInterpolation(decl: Declaration, file: string): SubsetFindi
       };
 }
 
-function handleDecl(decl: Declaration, file: string, namespaces: NamespaceMap, findings: SubsetFinding[]): void {
+function handleDecl(decl: Declaration, file: string, namespaces: NamespaceMap, findings: SyntaxFinding[]): void {
   const prop = decl.prop;
 
   if (prop.startsWith('$')) {
@@ -172,32 +172,32 @@ function handleDecl(decl: Declaration, file: string, namespaces: NamespaceMap, f
       pushUnsupportedAtNode(findings, file, decl, 'map/list value', 'never');
       return;
     }
-    findings.push(...checkDeclValue(decl, file, namespaces));
+    findings.push(...classifyDeclValue(decl, file, namespaces));
     return;
   }
 
   if (prop.startsWith('--')) {
     // Custom properties are raw text in both Sass and the dialect: only interpolation matters.
     findings.push(
-      ...checkInterpolationOnly(decl.value, { file, node: decl, baseOffset: declValueOffset(decl), namespaces }),
+      ...classifyInterpolationOnly(decl.value, { file, node: decl, baseOffset: declValueOffset(decl), namespaces }),
     );
     return;
   }
 
   if (prop.includes('#{')) {
     findings.push(classifyPropInterpolation(decl, file));
-    findings.push(...checkDeclValue(decl, file, namespaces));
+    findings.push(...classifyDeclValue(decl, file, namespaces));
     return;
   }
 
-  findings.push(...checkDeclValue(decl, file, namespaces));
+  findings.push(...classifyDeclValue(decl, file, namespaces));
 }
 
-function checkParenArgsIfAny(atrule: AtRule, file: string, namespaces: NamespaceMap): SubsetFinding[] {
+function classifyParenArgsIfAny(atrule: AtRule, file: string, namespaces: NamespaceMap): SyntaxFinding[] {
   const extracted = extractParenArgs(atrule.params);
   if (!extracted) return [];
   const baseOffset = atRuleParamsOffset(atrule) + extracted.offset;
-  return checkValue(extracted.content, { file, node: atrule, baseOffset, namespaces });
+  return classifyValue(extracted.content, { file, node: atrule, baseOffset, namespaces });
 }
 
 /**
@@ -238,7 +238,7 @@ function namespaceFromWrittenMixinName(params: string): boolean {
   return /^[\w-]+\./u.test(nameBeforeParen.trim());
 }
 
-function handleAtRule(atrule: AtRule, file: string, namespaces: NamespaceMap, findings: SubsetFinding[]): void {
+function handleAtRule(atrule: AtRule, file: string, namespaces: NamespaceMap, findings: SyntaxFinding[]): void {
   const name = atrule.name;
   const params = atrule.params;
 
@@ -249,7 +249,7 @@ function handleAtRule(atrule: AtRule, file: string, namespaces: NamespaceMap, fi
         return;
       }
       pushConvertAtNode(findings, file, atrule, '@mixin', 'mixins');
-      findings.push(...checkParenArgsIfAny(atrule, file, namespaces));
+      findings.push(...classifyParenArgsIfAny(atrule, file, namespaces));
       return;
     }
     case 'include': {
@@ -265,7 +265,7 @@ function handleAtRule(atrule: AtRule, file: string, namespaces: NamespaceMap, fi
       if (namespaceFromWrittenMixinName(params)) {
         pushConvertAtNode(findings, file, atrule, 'namespaced mixin reference', 'modules');
       }
-      findings.push(...checkParenArgsIfAny(atrule, file, namespaces));
+      findings.push(...classifyParenArgsIfAny(atrule, file, namespaces));
       return;
     }
     case 'content': {
@@ -335,7 +335,7 @@ function handleAtRule(atrule: AtRule, file: string, namespaces: NamespaceMap, fi
       const lowered = name.toLowerCase().replace(/^-\w+-/u, '');
       if (KNOWN_CSS_AT_RULES.has(lowered)) {
         findings.push(
-          ...checkValue(params, { file, node: atrule, baseOffset: atRuleParamsOffset(atrule), namespaces }),
+          ...classifyValue(params, { file, node: atrule, baseOffset: atRuleParamsOffset(atrule), namespaces }),
         );
         return;
       }
@@ -383,8 +383,8 @@ function buildNamespaceMap(root: Root): NamespaceMap {
  * by a conversion stage produce a `convert` finding, everything else produces an
  * `unsupported` finding (fail-closed).
  */
-export function analyzeSubset(root: Root, file: string): SubsetFinding[] {
-  const findings: SubsetFinding[] = [];
+export function classifySyntax(root: Root, file: string): SyntaxFinding[] {
+  const findings: SyntaxFinding[] = [];
   const namespaces = buildNamespaceMap(root);
 
   root.walk((node) => {
@@ -403,15 +403,15 @@ export function analyzeSubset(root: Root, file: string): SubsetFinding[] {
       return;
     }
     if (node.type === 'rule') {
-      findings.push(...checkSelector(node, file));
+      findings.push(...classifySelector(node, file));
     }
   });
 
   return findings;
 }
 
-/** Converts a `SubsetFinding` to a `Diagnostic` for uniform reporting alongside parse diagnostics. */
-export function subsetFindingToDiagnostic(finding: SubsetFinding): Diagnostic {
+/** Converts a `SyntaxFinding` to a `Diagnostic` for uniform reporting alongside parse diagnostics. */
+export function syntaxFindingToDiagnostic(finding: SyntaxFinding): Diagnostic {
   const { file, line, column, syntax, action } = finding;
   const base = {
     file,

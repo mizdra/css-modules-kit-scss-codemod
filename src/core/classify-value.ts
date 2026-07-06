@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import functionsListPath from 'css-functions-list';
 import valueParser from 'postcss-value-parser';
+import type { SyntaxAction, SyntaxFinding } from './classify.ts';
 import {
   COLOR_MODULE_FUNCTIONS,
   CSS_MATH_FUNCTIONS,
@@ -11,7 +12,6 @@ import {
   OTHER_GLOBAL_ALIASES,
   RGB_HSL_FUNCTIONS,
 } from './sass-builtin-functions.ts';
-import type { SubsetAction, SubsetFinding } from './subset.ts';
 
 const CSS_FUNCTION_NAMES: ReadonlySet<string> = new Set(
   JSON.parse(readFileSync(functionsListPath, 'utf8')) as string[],
@@ -26,10 +26,10 @@ export interface PositionedNode {
   positionInside(index: number): { readonly line: number; readonly column: number };
 }
 
-export interface ValueCheckOptions {
+export interface ClassifyValueOptions {
   readonly file: string;
   readonly node: PositionedNode;
-  /** Offset of the raw string (passed to `checkValue`) within `node`'s own stringified text. */
+  /** Offset of the raw string (passed to `classifyValue`) within `node`'s own stringified text. */
   readonly baseOffset: number;
   readonly namespaces: NamespaceMap;
 }
@@ -95,11 +95,11 @@ function isSingleVariableBody(body: string): boolean {
 
 function interpolationFindingsForSpans(
   spans: readonly InterpolationSpan[],
-  options: ValueCheckOptions,
-): SubsetFinding[] {
+  options: ClassifyValueOptions,
+): SyntaxFinding[] {
   return spans.map((span) => {
     const position = options.node.positionInside(options.baseOffset + span.start);
-    const action: SubsetAction = isSingleVariableBody(span.body)
+    const action: SyntaxAction = isSingleVariableBody(span.body)
       ? { kind: 'convert', stage: 'interpolation' }
       : {
           kind: 'unsupported',
@@ -117,7 +117,7 @@ function interpolationFindingsForSpans(
 }
 
 /** Runs only interpolation detection on a raw string (used for custom property values, which are otherwise literal). */
-export function checkInterpolationOnly(raw: string, options: ValueCheckOptions): SubsetFinding[] {
+export function classifyInterpolationOnly(raw: string, options: ClassifyValueOptions): SyntaxFinding[] {
   return interpolationFindingsForSpans(findInterpolationSpans(raw), options);
 }
 
@@ -201,7 +201,7 @@ function splitNamespace(name: string): { readonly alias: string; readonly fn: st
 }
 
 interface FunctionClassification {
-  readonly action: SubsetAction;
+  readonly action: SyntaxAction;
   readonly syntax: string;
 }
 
@@ -334,14 +334,14 @@ function classifyFunction(
   };
 }
 
-function offsetOf(node: valueParser.Node, options: ValueCheckOptions): number {
+function offsetOf(node: valueParser.Node, options: ClassifyValueOptions): number {
   return options.baseOffset + node.sourceIndex;
 }
 
 function pushWordFinding(
-  findings: SubsetFinding[],
+  findings: SyntaxFinding[],
   node: valueParser.WordNode,
-  options: ValueCheckOptions,
+  options: ClassifyValueOptions,
   insideMathFunction: boolean,
 ): void {
   const classification = classifyWord(node.value);
@@ -365,8 +365,8 @@ function pushWordFinding(
 
 function walkParsedValue(
   nodes: readonly valueParser.Node[],
-  options: ValueCheckOptions,
-  findings: SubsetFinding[],
+  options: ClassifyValueOptions,
+  findings: SyntaxFinding[],
   insideMathFunction: boolean,
 ): void {
   nodes.forEach((node, index) => {
@@ -414,9 +414,9 @@ function walkParsedValue(
   });
 }
 
-/** Full value-level check: interpolation extraction (pass 1), then operator/function classification (pass 2). */
-export function checkValue(raw: string, options: ValueCheckOptions): SubsetFinding[] {
-  const findings: SubsetFinding[] = [];
+/** Full value-level classification: interpolation extraction (pass 1), then operator/function classification (pass 2). */
+export function classifyValue(raw: string, options: ClassifyValueOptions): SyntaxFinding[] {
+  const findings: SyntaxFinding[] = [];
   const spans = findInterpolationSpans(raw);
   findings.push(...interpolationFindingsForSpans(spans, options));
   const masked = maskInterpolationSpans(raw, spans);
@@ -428,7 +428,7 @@ export function checkValue(raw: string, options: ValueCheckOptions): SubsetFindi
 }
 
 /** Sorts findings by (line, column), for callers that assemble findings from more than one pass. */
-export function sortByPosition(findings: readonly SubsetFinding[]): SubsetFinding[] {
+export function sortByPosition(findings: readonly SyntaxFinding[]): SyntaxFinding[] {
   return [...findings].sort((a, b) => (a.line ?? 0) - (b.line ?? 0) || (a.column ?? 0) - (b.column ?? 0));
 }
 
@@ -443,6 +443,6 @@ export function extractParenArgs(params: string): { readonly content: string; re
     else if (params[i] === ')') depth--;
     i++;
   }
-  if (depth !== 0) return undefined; // unbalanced — caller should not attempt to value-check it
+  if (depth !== 0) return undefined; // unbalanced — caller should not attempt to classify it
   return { content: params.slice(open + 1, i - 1), offset: open + 1 };
 }
