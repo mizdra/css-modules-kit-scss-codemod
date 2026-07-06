@@ -355,7 +355,7 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 #### PR1: 基盤 + analyze (ブランチ: `m0-cli-skeleton`)
 
 - [x] **Step 1: パッケージ準備 + CLI 骨格** — bin 追加、parseArgs によるコマンド分岐 (analyze / convert / verify / todo)、stage テーブル (名前 × マイルストーン)、exit code 規約 (0 = 成功 / 1 = 未実装・診断ありで失敗 / 2 = 使い方エラー)。全コマンドは未実装スタブ (846aa4b)
-- [x] **Step 2: core/collect + core/diagnostic** — tinyglobby による glob 収集、`--exclude`、`node_modules` 常時除外。`Diagnostic` 型 (file/line/column/syntax/milestone/message/hint) と人間向け・JSON 整形 (8c8413f)
+- [x] **Step 2: core/collect + core/diagnostic** — `node:fs/promises` の `glob` による glob 収集、`--exclude`、`node_modules` 常時除外。`Diagnostic` 型 (file/line/column/syntax/milestone/message/hint) と人間向け・JSON 整形 (8c8413f)
 - [ ] **Step 3: core/parse** — postcss-scss ラッパ。パース失敗の Diagnostic 化。postcss / postcss-scss を exact version で dependencies に追加 ([§5.1](#51-パーサー構成))
 - [ ] **Step 4: core/subset (whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-部分集合) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知
 - [ ] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → Sass candidate 展開 → oxc-resolver で解決。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成))

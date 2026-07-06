@@ -1,76 +1,115 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, expect, test } from "vite-plus/test";
+import dedent from "dedent";
+import { createFixture } from "fs-fixture";
+import { expect, test } from "vite-plus/test";
 import { collectFiles } from "./collect.ts";
 
-let dir: string;
+test("collects files matching a glob pattern as absolute paths", async () => {
+  await using fixture = await createFixture({
+    "a.module.scss": dedent`
+      .a { color: red; }
+    `,
+    "b.module.scss": "",
+    "c.txt": "",
+  });
 
-beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "collect-test-"));
+  const files = await collectFiles(["**/*.module.scss"], { cwd: fixture.path });
+
+  expect(files).toEqual([fixture.getPath("a.module.scss"), fixture.getPath("b.module.scss")]);
 });
 
-afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
-});
+test("merges results from multiple patterns without duplicates, sorted", async () => {
+  await using fixture = await createFixture({
+    "a.module.scss": "",
+    "b.module.scss": "",
+    "_partial.scss": dedent`
+      $color: red;
+    `,
+  });
 
-function writeFixture(relativePath: string): void {
-  const absolutePath = join(dir, relativePath);
-  mkdirSync(join(absolutePath, ".."), { recursive: true });
-  writeFileSync(absolutePath, "");
-}
-
-test("glob パターンに一致するファイルを絶対パスで収集する", async () => {
-  writeFixture("a.module.scss");
-  writeFixture("b.module.scss");
-  writeFixture("c.txt");
-
-  const files = await collectFiles(["**/*.module.scss"], { cwd: dir });
-
-  expect(files).toEqual([join(dir, "a.module.scss"), join(dir, "b.module.scss")]);
-});
-
-test("複数パターンの結果をマージして重複なくソート順で返す", async () => {
-  writeFixture("a.module.scss");
-  writeFixture("b.module.scss");
-  writeFixture("_partial.scss");
-
-  const files = await collectFiles(["**/*.module.scss", "**/*.scss"], { cwd: dir });
+  const files = await collectFiles(["**/*.module.scss", "**/*.scss"], { cwd: fixture.path });
 
   expect(files).toEqual([
-    join(dir, "_partial.scss"),
-    join(dir, "a.module.scss"),
-    join(dir, "b.module.scss"),
+    fixture.getPath("_partial.scss"),
+    fixture.getPath("a.module.scss"),
+    fixture.getPath("b.module.scss"),
   ]);
 });
 
-test("exclude パターンに一致するファイルを除外する", async () => {
-  writeFixture("a.module.scss");
-  writeFixture("b.module.scss");
-  writeFixture("vendor/c.module.scss");
-  writeFixture("legacy/d.module.scss");
+test("excludes files matching an exclude pattern", async () => {
+  await using fixture = await createFixture({
+    "a.module.scss": "",
+    "b.module.scss": "",
+    vendor: {
+      "c.module.scss": "",
+    },
+    legacy: {
+      "d.module.scss": "",
+    },
+  });
 
   const files = await collectFiles(["**/*.module.scss"], {
-    cwd: dir,
+    cwd: fixture.path,
     exclude: ["**/vendor/**", "**/legacy/**"],
   });
 
-  expect(files).toEqual([join(dir, "a.module.scss"), join(dir, "b.module.scss")]);
+  expect(files).toEqual([fixture.getPath("a.module.scss"), fixture.getPath("b.module.scss")]);
 });
 
-test("node_modules 配下のファイルは glob に一致しても常に除外する", async () => {
-  writeFixture("a.module.scss");
-  writeFixture("node_modules/some-pkg/b.module.scss");
+test("always excludes node_modules even when an exclude option is given", async () => {
+  await using fixture = await createFixture({
+    "a.module.scss": "",
+    node_modules: {
+      "some-pkg": {
+        "b.module.scss": "",
+      },
+    },
+  });
 
-  const files = await collectFiles(["**/*.module.scss"], { cwd: dir });
+  const files = await collectFiles(["**/*.module.scss"], {
+    cwd: fixture.path,
+    exclude: ["**/vendor/**"],
+  });
 
-  expect(files).toEqual([join(dir, "a.module.scss")]);
+  expect(files).toEqual([fixture.getPath("a.module.scss")]);
 });
 
-test("一致するファイルがないとき空配列を返す", async () => {
-  writeFixture("a.txt");
+test("excludes node_modules even without an exclude option", async () => {
+  await using fixture = await createFixture({
+    "a.module.scss": "",
+    node_modules: {
+      "some-pkg": {
+        "b.module.scss": "",
+      },
+    },
+  });
 
-  const files = await collectFiles(["**/*.module.scss"], { cwd: dir });
+  const files = await collectFiles(["**/*.module.scss"], { cwd: fixture.path });
+
+  expect(files).toEqual([fixture.getPath("a.module.scss")]);
+});
+
+test("returns an empty array when no file matches", async () => {
+  await using fixture = await createFixture({
+    "a.txt": "",
+  });
+
+  const files = await collectFiles(["**/*.module.scss"], { cwd: fixture.path });
 
   expect(files).toEqual([]);
+});
+
+test("returns only files even when a pattern matches a directory", async () => {
+  await using fixture = await createFixture({
+    "a.module.scss": "",
+    "dir.module.scss": {
+      "e.module.scss": "",
+    },
+  });
+
+  const files = await collectFiles(["**/*.module.scss"], { cwd: fixture.path });
+
+  expect(files).toEqual([
+    fixture.getPath("a.module.scss"),
+    fixture.getPath("dir.module.scss/e.module.scss"),
+  ]);
 });

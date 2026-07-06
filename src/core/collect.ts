@@ -1,4 +1,5 @@
-import { glob } from "tinyglobby";
+import { glob } from "node:fs/promises";
+import { resolve } from "node:path";
 
 export interface CollectOptions {
   readonly cwd: string;
@@ -10,14 +11,18 @@ export async function collectFiles(
   patterns: readonly string[],
   options: CollectOptions,
 ): Promise<string[]> {
-  const ignore = ["**/node_modules/**", ...(options.exclude ?? [])];
+  const exclude = ["**/node_modules/**", ...(options.exclude ?? [])];
 
-  const files = await glob(patterns, {
+  const files: string[] = [];
+  for await (const entry of glob(patterns, {
     cwd: options.cwd,
-    ignore,
-    absolute: true,
-    expandDirectories: false,
-  });
+    exclude,
+    withFileTypes: true,
+  })) {
+    if (entry.isFile()) {
+      files.push(resolve(entry.parentPath, entry.name));
+    }
+  }
 
   return [...new Set(files)].sort();
 }
