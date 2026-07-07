@@ -1,12 +1,11 @@
-import type { Writable } from 'node:stream';
-import { parseCommandArgs } from './parse-args.ts';
+import { resolve } from 'node:path';
+import { runAnalyzeCommand } from './commands/analyze.ts';
+import type { CliIo } from './io.ts';
+import { parseAliasArgs, parseCommandArgs } from './parse-args.ts';
 import { findStage, STAGE_NAMES } from './stages.ts';
 import { USAGE } from './usage.ts';
 
-export interface CliIo {
-  stdout: Writable;
-  stderr: Writable;
-}
+export type { CliIo } from './io.ts';
 
 function help(io: CliIo): number {
   io.stdout.write(USAGE);
@@ -23,7 +22,14 @@ function notImplemented(io: CliIo, message: string): number {
   return 1;
 }
 
-function runAnalyze(args: string[], io: CliIo): number {
+/** Narrows a parsed multi-value option (`string | boolean | (string | boolean)[] | undefined`) down to its strings. */
+function toStringArray(value: string | boolean | (string | boolean)[] | undefined): string[] {
+  if (value === undefined) return [];
+  const values = Array.isArray(value) ? value : [value];
+  return values.filter((entry): entry is string => typeof entry === 'string');
+}
+
+async function runAnalyze(args: string[], io: CliIo): Promise<number> {
   const parsed = parseCommandArgs('analyze', args, {
     'exclude': { type: 'string', multiple: true },
     'load-path': { type: 'string', multiple: true },
@@ -34,7 +40,22 @@ function runAnalyze(args: string[], io: CliIo): number {
   if (parsed.positionals.length === 0) {
     return usageError(io, 'scss-codemod analyze: missing <patterns...>');
   }
-  return notImplemented(io, 'The "analyze" command is not implemented yet.');
+
+  const cwd = io.cwd ?? process.cwd();
+  const aliasResult = parseAliasArgs(toStringArray(parsed.values.alias), cwd);
+  if (!aliasResult.ok) return usageError(io, aliasResult.message);
+  const loadPaths = toStringArray(parsed.values['load-path']).map((loadPath) => resolve(cwd, loadPath));
+
+  return runAnalyzeCommand(
+    {
+      patterns: parsed.positionals,
+      exclude: toStringArray(parsed.values.exclude),
+      loadPaths,
+      alias: aliasResult.alias,
+      json: parsed.values.json === true,
+    },
+    io,
+  );
 }
 
 function runConvert(args: string[], io: CliIo): number {
@@ -93,8 +114,6 @@ function runTodo(args: string[], io: CliIo): number {
   return notImplemented(io, 'The "todo" command is not implemented yet.');
 }
 
-// `runCli` is async as part of its public contract; upcoming stages will perform async I/O.
-// oxlint-disable-next-line typescript/require-await
 export async function runCli(argv: string[], io: CliIo): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) {
     return help(io);
@@ -107,7 +126,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
     case 'analyze':
-      return runAnalyze(rest, io);
+      return await runAnalyze(rest, io);
     case 'convert':
       return runConvert(rest, io);
     case 'verify':

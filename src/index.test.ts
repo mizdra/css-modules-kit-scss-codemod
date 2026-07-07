@@ -52,17 +52,6 @@ test('returns a usage error when analyze is given no patterns', async () => {
   expect(result.exitCode).toBe(2);
 });
 
-test('returns not implemented for analyze', async () => {
-  const result = await run(['analyze', '**/*.module.scss']);
-  expect(result.exitCode).toBe(1);
-  expect(result.stderr).toContain('not implemented');
-});
-
-test('accepts --json and multiple --exclude on analyze', async () => {
-  const result = await run(['analyze', '--json', '--exclude', 'a/**', '--exclude', 'b/**', 'src/**/*.scss']);
-  expect(result.exitCode).toBe(1);
-});
-
 test('returns a usage error when convert is given no stage', async () => {
   const result = await run(['convert']);
   expect(result.exitCode).toBe(2);
@@ -117,15 +106,5 @@ test('returns not implemented for todo', async () => {
 
 test('accepts a --json option on todo', async () => {
   const result = await run(['todo', '--json', 'x']);
-  expect(result.exitCode).toBe(1);
-});
-
-test('accepts repeatable --load-path without a usage error', async () => {
-  const result = await run(['analyze', '--load-path', 'styles', '--load-path', 'vendor', 'src/**/*.scss']);
-  expect(result.exitCode).toBe(1);
-});
-
-test('accepts repeatable --alias without a usage error', async () => {
-  const result = await run(['analyze', '--alias', '@=src', '--alias', 'theme$=src/theme.scss', 'src/**/*.scss']);
   expect(result.exitCode).toBe(1);
 });
