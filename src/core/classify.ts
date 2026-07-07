@@ -220,7 +220,7 @@ function outsideParenArgs(params: string): string {
 }
 
 /** Whether `@import`'s params describe a plain-CSS import (design doc §6, `@import` row). */
-function isPlainCssImport(params: string): boolean {
+export function isPlainCssImport(params: string): boolean {
   const trimmed = params.trim();
   if (/^url\(/iu.test(trimmed)) return true;
   const match = /^(['"])((?:\\.|(?!\1).)*)\1/u.exec(trimmed);

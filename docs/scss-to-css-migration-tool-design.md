@@ -27,7 +27,7 @@ CSS は描画に直結するため、**移行の安全性を最重視する**。
 ### 前提
 
 - 対象は SCSS 記法のみ。インデント記法 (`.sass`) は対象外
-- 対象コードは dart-sass でコンパイルできる (できないファイルは analyze が報告する)
+- 変換前のコードベースは bundler (および bundler 経由の sass コンパイラ) でエラーなく bundle できる ([§3](#3-設計指針) 指針 4)。analyze のコンパイル可否検査は、この前提が満たされていることのサニティチェックとして働く
 - ユーザは bundler と minifier を使っている (CSS Modules は bundler とセットで使うものであるため)。たとえば「`//` → `/* */` 変換でコメントが CSS 出力に残る」ような差分は minify で消えるため安全とみなす
 - 変換後、ユーザのビルドは Sass から PostCSS プラグイン列 (postcss-mixins → postcss-simple-vars → postcss-nested。古いブラウザをサポートする場合は後段に postcss-preset-env を追加。[§6.1](#61-式関数の-css-への写像)) に切り替わる。設定の書き換え自体はユーザに一任し、ツールは案内のみ出力する
 
@@ -54,6 +54,7 @@ CSS は描画に直結するため、**移行の安全性を最重視する**。
 1. **安全な変換**。変換対象として定義された構文の一覧 ([§6](#6-対応する-sass-構文) の表) に載っている構文だけを変換し、載っていない構文は — 一見無害に見えても — 素通しせずエラーにする (whitelist 方式・fail-closed)。Sass の値の意味論は再実装しない: 式や関数は codemod が値を計算するのではなく CSS の対応物へ写像し ([§6.1](#61-式関数の-css-への写像))、計算は既存の評価器 (Sass ビルド・ブラウザ・minifier・verify) に任せる。
 2. **コーディングスタイルの保持**。共通化のためのコード (変数・mixin・ネスト) は共通化を維持したまま変換する。PostCSS 方言は SCSS と構文がほぼ同じため、`$var`・ネストは原則無変換で保持され、mixin もキーワードの書き換えだけで済む。整形・コメントは postcss-scss の raws で保持する。`&` 連結 (`&_bar` 等) も無変換で保持する (脱糖は css-codemod の責務。[§12](#12-css-codemod-との境界))。
 3. **段階的な変換**。変換する項目を構文単位 (= stage 単位) でユーザが選択し、ユーザが glob で指定した対象ファイルへ一括適用する。1 stage = 1 commit で同質な diff をレビューできる。安全性の区分は選択の括りではなく、analyze が表示するラベルとする。
+4. **稼働中のコードを入力とする**。ユーザは本番環境で既に問題なく稼働しているプロダクトのコードを変換しようとする、という前提を置く。つまり変換前のコードベースは bundler (および bundler 経由の sass コンパイラ) でエラーなく bundle できると仮定してよく、bundler や dart-sass がエラーにする入力 (例: `theme.scss` と `_theme.scss` の併存による ambiguous な specifier、コンパイルエラーに到達するコード) を codemod が検出・診断することは責務としない (そのような入力に対する挙動は保証しない)。fail-closed (指針 1) は「ビルドできる入力のうち、変換対象外の構文を素通ししない」ことに適用する。
 
 適用単位を「1 ファイルずつ」ではなく「stage ごとに対象範囲へ一括」とするのは、複数ファイルを解析しないと変換方式が定まらない変換 (名前の衝突検査、partial と consumer の同時書き換え) があるため。対象範囲への一括適用でも stage は個別に選べるので、段階的な変換は維持される。
 
@@ -92,6 +93,8 @@ CSS は描画に直結するため、**移行の安全性を最重視する**。
 dart-sass、resolver、各 postcss プラグインは dependencies (`^x.y.z`) に持ち、実際に解決されたバージョンをレポートに記録する。
 
 module graph は、対象 glob に含まれる各ファイルの AST から `@use`・`@forward`・Sass `@import` を抽出し、bundler-compatible resolver で specifier を解決して importer から imported への edge を構築する。resolver の実装と設定はレポートに記録する。対象 glob の範囲外、`--exclude` に一致する、または `node_modules` 配下にある参照先は graph 上に存在しないものとして無視し、そのファイルを解析・変換しない。
+
+specifier の解決は **sass-loader 方式**に準拠する ([§14](#14-参考一次情報) の sass-loader@0e793b0 調査): 自前で行うのは partial の `_` 展開のみで、1 specifier あたり `[dir/_basename, dir/basename]` の 2 requests (`.css` 末尾なら specifier そのもの 1 request) を順に試す。拡張子省略は resolver の `extensions: ['.scss', '.css']`、ディレクトリ参照 (`_index`/`index`) は `mainFiles: ['_index', 'index']`、相対 → `node_modules` の順序は `preferRelative: true` に委譲する。`node_modules` 解決は `modules: ['node_modules']`・`mainFields: ['sass', 'style', 'main']`・`conditionNames: ['sass', 'style']` で行い、`restrictions` (`\.s?css$`) により解決結果が `.scss`/`.css` 以外なら fail とする (fail-closed。package entry が `.js` を指すケースの誤解決防止)。requests は first-match-wins で、全 requests が失敗したら `--load-path <dir>` で指定した各ディレクトリから相対解決 (`./` prefix 強制) を試す (`--load-path` は dart-sass の loadPaths 相当)。ユーザの bundler 設定 (loadPaths・alias) は `--load-path`・`--alias <from=to>` で codemod に伝える: alias は oxc-resolver の `alias` オプションに渡され、enhanced-resolve 意味論 (key は prefix match、`$` 終端 key は exact match) で解決される。vite の regex alias など enhanced-resolve 意味論で表現できない設定は非対応。全体の解決順 (importer 相対 → `node_modules` → load paths) は vite + sass / Next.js (turbopack) + sass の実験で確認した両 bundler の実際の解決順と一致し (2026-07-07 の実験。[§14](#14-参考一次情報))、Sass JS API の current importer → importers → loadPaths の解決順にも対応する。ambiguity (`theme.scss` と `_theme.scss` の併存など) は検出しない: そのような入力は sass 自体がエラーにするため、設計指針 4 ([§3](#3-設計指針)) により前提外とする (sass-loader も同じ割り切りで、`_` 付き request を先に試す)。
 
 ### 5.2 値の形の静的検査
 
@@ -151,16 +154,17 @@ codemod は値を評価しないが、変換の適用条件の判定に「値の
 ## 7. CLI 設計
 
 ```
-cmk-scss-codemod analyze <patterns...> [--exclude <pattern>...] [--json]
-cmk-scss-codemod convert <stage> <patterns...> [--exclude <pattern>...]
+cmk-scss-codemod analyze <patterns...> [--exclude <pattern>...] [--load-path <dir>...] [--alias <from=to>...] [--json]
+cmk-scss-codemod convert <stage> <patterns...> [--exclude <pattern>...] [--load-path <dir>...] [--alias <from=to>...]
                                       # stage: comments | at-statements | expressions | colors |
                                       #        modules | mixins | interpolation | to-css
-cmk-scss-codemod verify <patterns...> [--exclude <pattern>...] [--against <git-rev>]
-cmk-scss-codemod todo <patterns...> [--exclude <pattern>...] [--json]
+cmk-scss-codemod verify <patterns...> [--exclude <pattern>...] [--load-path <dir>...] [--alias <from=to>...] [--against <git-rev>]
+cmk-scss-codemod todo <patterns...> [--exclude <pattern>...] [--load-path <dir>...] [--alias <from=to>...] [--json]
 ```
 
 - **対象範囲**: 1 つ以上の glob を位置引数で受け取る (例: `cmk-scss-codemod convert modules "**/*.module.scss"`)。`--exclude` は複数指定でき、一致したファイルを明示的に除外する。`node_modules` 配下は指定 glob に一致しても常にデフォルトで除外する。対象 glob の範囲外にあるファイルは module graph の構築時にも存在しないものとして無視する。
-- **`analyze`**: 変換せず分析だけ行う。コンパイル不能ファイル、stage × ファイルの適用可否と安全性ラベル、module graph と partial の分類、生成名 (namespace 剥がし後の変数名・mixin 名) の横断衝突検査、todo 対象の列挙。
+- **解決設定**: ユーザの bundler / sass 設定のうち specifier 解決に影響するものは `--load-path <dir>` (dart-sass の loadPaths 相当) と `--alias <from=to>` (bundler の `resolve.alias` 相当) で codemod に伝える ([§5.1](#51-パーサー構成))。いずれも repeatable。
+- **`analyze`**: 変換せず分析だけ行う。コンパイル不能ファイル (稼働中のコード前提が満たされていることのサニティチェック。[§3](#3-設計指針) 指針 4)、stage × ファイルの適用可否と安全性ラベル、module graph と partial の分類、生成名 (namespace 剥がし後の変数名・mixin 名) の横断衝突検査、todo 対象の列挙。
 - **`convert <stage>`**: 指定した stage を glob で選択した対象範囲へ一括適用する ([§8](#8-stage-の設計))。順序制約に違反する指定はエラー。機械検証つきの stage は変換前後の dart-sass 出力比較を自動実行し、不一致なら書き込まず中断する。
 - **`verify`**: end-to-end の differential comparison ([§10](#10-verify-の設計))。
 - **`todo`**: 変換できない箇所の洗い出しと修正ヒントの出力 ([§11](#11-todo-変換できない箇所の洗い出し))。
@@ -360,7 +364,7 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 - [x] **Step 2: core/collect + core/diagnostic** — `node:fs/promises` の `glob` による glob 収集、`--exclude`、`node_modules` 常時除外。`Diagnostic` 型 (file/line/column/syntax/milestone/message/hint) と人間向け・JSON 整形 (8c8413f, 2d1ee9d)
 - [x] **Step 3: core/parse** — postcss-scss ラッパ。パース失敗の Diagnostic 化。postcss / postcss-scss を dependencies に追加 ([§5.1](#51-パーサー構成)) (26ac783)
 - [x] **Step 4: core/classify (構文分類 = whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-構文) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知 (c67d801)
-- [ ] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → Sass candidate 展開 → oxc-resolver で解決。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成))
+- [x] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → sass-loader 方式の `_` 展開 + oxc-resolver で解決 (相対 → node_modules → `--load-path` の順)。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成)) (853a55e, 93e7f77, 6bb7d73, 2207e3d)
 - [ ] **Step 6: core/partial** — partial 分類 (definition-only / style-emitting / mixed。[§9.1](#91-partial-の検出と分類))
 - [ ] **Step 7: core/sass-compile** — dart-sass (`sass` を dependencies に追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定
 - [ ] **Step 8: commands/analyze 統合** — Step 2–7 を組み合わせ、人間向け出力と `--json` を実装。project fixture (複数ファイル構成) による e2e テスト
@@ -380,7 +384,7 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 
 ## 14. 参考一次情報
 
-設計の根拠にした一次情報。事実は 2026-07-06 に一次情報・実験で検証した。
+設計の根拠にした一次情報。検証日は各項目に記載 (無印は 2026-07-06)。
 
 - **sass-parser**: [npm: sass-parser](https://www.npmjs.com/package/sass-parser) — production 不適・raws 未対応の警告。リポジトリは [sass/dart-sass の `pkg/sass-parser`](https://github.com/sass/dart-sass)。
 - **Lightning CSS の `@value` 非対応**: [CSS Modules – Lightning CSS](https://lightningcss.dev/css-modules.html)、[parcel-bundler/lightningcss#659](https://github.com/parcel-bundler/lightningcss/issues/659)。
@@ -391,5 +395,8 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 - **vite の Sass `@use` の per-entry 複製 (ソースコード + 実験、2026-07-06、vite@a1d73a3 / 8.1.3)**: `packages/vite/src/node/plugins/css.ts` — transform フックがファイル単位で `compileCSS` を呼び (L366-373, L433)、`makeScssWorker` が 1 ファイルごとに `compileStringAsync` を実行 (L2610)。実験: `_shared.scss` を 3 つの `.module.scss` から `@use` → dist に `.shared` が 3 回複製 (ハッシュは importer ごとに別)。単一ファイル内の `@use ... as s1; @use ... as s2;` は 1 回のみ。
 - **vite の CSS `@import` (ソースコード + 実験、2026-07-06)**: postcss-import による per-importer インライン展開 (css.ts L1543, L1566-1568)、build は連結のみで重複排除なし (L621, L694)。実験: 4 importer → 4 回複製。
 - **turbopack の CSS `@import` (ソースコード調査、2026-07-06、vercel/next.js@901c0803)**: `turbopack/crates/turbopack-css/src/references/mod.rs` (`@import` → `ImportAssetReference` 化しルール除去)、`references/import.rs` (`ChunkingType::Parallel`)、`turbopack-core/src/chunk/chunk_group.rs` (モジュール単位の重複排除)。
+- **bundler + sass の specifier 解決順 (自前実験、2026-07-07、vite@8.1.1 / next@16.2.9 (Turbopack) / sass@1.101.0)**: `@use` の specifier が相対・node_modules・loadPaths の複数箇所に解決し得る衝突 fixture (候補ごとに一意なマーカー selector を持たせ、ビルド出力 CSS に残るもので勝者を判定) を両 bundler でビルド。どちらも**相対 → node_modules (bare specifier のみ) → loadPaths** の first-match-wins で完全一致 ([§5.1](#51-パーサー構成) の解決順の根拠)。node_modules 側の fixture は package.json `sass` field と `index.scss`/`_index.scss` を同一マーカーで併置しており、機構間の順序は確定するが node_modules 内の entry 形式ごとの優先順はこの実験では判別していない。bare specifier の node_modules 解決・loadPaths は単体でも両者で機能。付随して確認: turbopack (next@16.2.9) では `sassOptions.includePaths` は相対・絶対とも効かず、dart-sass modern API のオプション名である `loadPaths` のみ有効。
+- **sass-loader の resolve 実装 (ソースコード調査、2026-07-08、webpack/sass-loader@0e793b0)**: `src/utils.js` — `getPossibleRequests` (L406-420) が自前で行うのは partial の `_` 展開のみで、`[dir/_basename, dir/basename]` の 2 requests を生成する (`.css` 末尾は `[url]` のみ。`.import` 変種はレガシー `@import` 専用)。拡張子・ディレクトリ参照・パッケージ解決は enhanced-resolve の設定 (L495-516) に委譲: `extensions: ['.sass', '.scss', '.css']`・`mainFiles: ['_index', 'index', '...']`・`mainFields: ['sass', 'style', 'main', '...']`・`conditionNames: ['sass', 'style', '...']`・`restrictions: [/\.((sa|sc|c)ss)$/i]`・`preferRelative: true`。requests は first-match-wins で ambiguity は検出せず、正当化コメント (L487-494) は「`_name.sass` と `name.sass` (等) の併存は sass 自体がエラーにするので問題ない」と述べる。
+- **oxc-resolver の sass-loader 相当設定の挙動検証 (自前実験、2026-07-08、oxc-resolver@11.23.0)**: (1) `extensions: ['.scss', '.css']` で request `./_theme` → `_theme.scss`、(2) `mainFiles: ['_index', 'index']` で request `./dirref` → `dirref/_index.scss`、(3) `theme.scss` と `theme/_index.scss` の併存では file (`theme.scss`) を優先、(4) `preferRelative: true` で拡張子なし bare request は相対優先 (`./foo.scss` があれば相対、なければ `node_modules/foo` の sass field へ)、(5) `restrictions: [{ regex: '\\.s?css$' }]` で package entry が `.js` を指す解決を fail にできる (相対・node_modules の正常系には影響なし) — いずれも enhanced-resolve と同挙動であることを確認。
 - **Sass 言語仕様**: [Comments](https://sass-lang.com/documentation/syntax/comments/)、[@error](https://sass-lang.com/documentation/at-rules/error/)、[Variables](https://sass-lang.com/documentation/variables/)、[@use](https://sass-lang.com/documentation/at-rules/use/)、[@import is deprecated](https://sass-lang.com/blog/import-is-deprecated/)。
 - **CMK**: [README](https://github.com/mizdra/css-modules-kit-scss-codemod/blob/main/README.md/README.md)、[AGENTS.md](https://github.com/mizdra/css-modules-kit-scss-codemod/blob/main/AGENTS.md) (トークン・all token importer の定義)。
