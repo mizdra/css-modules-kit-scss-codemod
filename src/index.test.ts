@@ -69,8 +69,8 @@ test('returns a usage error when convert is given no patterns', async () => {
   expect(result.exitCode).toBe(2);
 });
 
-test('returns not implemented for convert comments', async () => {
-  const result = await run(['convert', 'comments', 'src/**/*.scss']);
+test('returns not implemented for convert to-css (an M0 stage without a transform yet)', async () => {
+  const result = await run(['convert', 'to-css', 'x']);
   expect(result.exitCode).toBe(1);
   expect(result.stderr).toContain('not implemented');
 });
