@@ -10,7 +10,6 @@ export interface StageInfo {
 export const STAGES = [
   { name: 'comments', milestone: 'M0' },
   { name: 'at-statements', milestone: 'M0' },
-  { name: 'nesting', milestone: 'M0' },
   { name: 'to-css', milestone: 'M0' },
   { name: 'expressions', milestone: 'M1' },
   { name: 'modules', milestone: 'M1' },

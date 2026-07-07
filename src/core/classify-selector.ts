@@ -1,6 +1,6 @@
 import type { Rule } from 'postcss';
 import selectorParser from 'postcss-selector-parser';
-import { findInterpolationSpans, type InterpolationSpan, sortByPosition } from './classify-value.ts';
+import { findInterpolationSpans, sortByPosition } from './classify-value.ts';
 import type { SyntaxFinding } from './classify.ts';
 
 const SINGLE_VARIABLE_BODY = /^\$[\w-]+$/u;
@@ -11,10 +11,10 @@ function isSingleVariableBody(body: string): boolean {
 
 /**
  * Collects every `selector` container: the top-level ones plus those nested inside
- * functional pseudo-classes (`:is(...)`, `:not(...)`, ...), recursively — placeholder and
- * concatenation checks must not be escapable by wrapping in a pseudo. `sourceIndex` values
- * inside pseudos are absolute within the selector string (verified empirically), so
- * position math is identical at every depth.
+ * functional pseudo-classes (`:is(...)`, `:not(...)`, ...), recursively — the placeholder
+ * check must not be escapable by wrapping in a pseudo. `sourceIndex` values inside pseudos
+ * are absolute within the selector string (verified empirically), so position math is
+ * identical at every depth.
  */
 function collectSelectorContainers(root: selectorParser.Root): selectorParser.Selector[] {
   const containers: selectorParser.Selector[] = [];
@@ -32,40 +32,16 @@ function collectSelectorContainers(root: selectorParser.Root): selectorParser.Se
   return containers;
 }
 
-interface ConcatenationPair {
-  readonly nesting: selectorParser.Nesting;
-  readonly tag: selectorParser.Tag;
-  readonly nestingFirst: boolean;
-}
-
-function matchConcatenationPair(a: selectorParser.Node, b: selectorParser.Node): ConcatenationPair | undefined {
-  if (a.type === 'nesting' && b.type === 'tag') return { nesting: a, tag: b, nestingFirst: true };
-  if (a.type === 'tag' && b.type === 'nesting') return { nesting: b, tag: a, nestingFirst: false };
-  return undefined;
-}
-
-/**
- * The raw text range the concatenated `tag` occupies. postcss-selector-parser's own
- * `sourceIndex` for a tag containing `#{...}` is unreliable (verified empirically: it's
- * computed from the wrong underlying token once a word is split by interpolation), so the
- * range is derived from the always-reliable `nesting` node (`&` is always exactly 1 char)
- * instead of trusting `tag.sourceIndex` directly.
- */
-function tagRange(pair: ConcatenationPair): { readonly start: number; readonly end: number } {
-  if (pair.nestingFirst) {
-    const start = pair.nesting.sourceIndex + 1;
-    return { start, end: start + pair.tag.value.length };
-  }
-  const end = pair.nesting.sourceIndex;
-  return { start: end - pair.tag.value.length, end };
-}
-
 /**
  * Selector-level classification (design doc §6). Parses `rule.selector` with postcss-selector-parser,
  * which tolerates `#{...}` interpolation. Interpolation positions are computed from a raw
  * brace-counting scan of `rule.selector` (shared with the value-level pass 1), not from
  * postcss-selector-parser's `sourceIndex`, because that index is corrupted for any node
  * whose text contains `#{` (verified empirically against postcss-selector-parser@7.1.4).
+ *
+ * `&` concatenation (`&_bar`) is intentionally NOT reported: postcss-nested resolves it
+ * with Sass-compatible semantics, so it is kept as-is; desugaring it into standalone
+ * class selectors is css-codemod's responsibility.
  */
 export function classifySelector(rule: Rule, file: string): SyntaxFinding[] {
   const start = rule.source?.start;
@@ -86,14 +62,9 @@ export function classifySelector(rule: Rule, file: string): SyntaxFinding[] {
   }
 
   const findings: SyntaxFinding[] = [];
-  // Sass evaluates interpolation everywhere in a selector, including inside attribute
-  // selectors (`[data-state="#{$state}"]`), so no span is excluded from classification.
-  const spans = findInterpolationSpans(rule.selector);
-  const consumed = new Set<InterpolationSpan>();
 
   for (const selectorNode of collectSelectorContainers(root)) {
-    const nodes = selectorNode.nodes;
-    nodes.forEach((node) => {
+    for (const node of selectorNode.nodes) {
       if (node.type === 'tag' && node.value.startsWith('%')) {
         const position = rule.positionInside(node.sourceIndex);
         findings.push({
@@ -104,45 +75,12 @@ export function classifySelector(rule: Rule, file: string): SyntaxFinding[] {
           action: { kind: 'unsupported', milestone: 'never' },
         });
       }
-    });
-
-    for (let i = 0; i < nodes.length - 1; i++) {
-      const a = nodes[i];
-      const b = nodes[i + 1];
-      if (!a || !b) continue;
-      const pair = matchConcatenationPair(a, b);
-      if (!pair) continue;
-      // No combinator sits between them (guaranteed by array adjacency) and no whitespace either.
-      if (a.spaces.after !== '' || b.spaces.before !== '') continue;
-
-      const position = rule.positionInside(pair.nesting.sourceIndex);
-      const hasInterpolation = pair.tag.value.includes('#{');
-      if (hasInterpolation) {
-        findings.push({
-          file,
-          line: position.line,
-          column: position.column,
-          syntax: 'selector concatenation with interpolation',
-          action: { kind: 'unsupported', milestone: 'never' },
-        });
-        const range = tagRange(pair);
-        for (const span of spans) {
-          if (span.start >= range.start && span.start < range.end) consumed.add(span);
-        }
-      } else {
-        findings.push({
-          file,
-          line: position.line,
-          column: position.column,
-          syntax: 'selector concatenation',
-          action: { kind: 'convert', stage: 'nesting' },
-        });
-      }
     }
   }
 
-  for (const span of spans) {
-    if (consumed.has(span)) continue;
+  // Sass evaluates interpolation everywhere in a selector, including inside attribute
+  // selectors (`[data-state="#{$state}"]`), so no span is excluded from classification.
+  for (const span of findInterpolationSpans(rule.selector)) {
     const position = rule.positionInside(span.start);
     const singleVariable = isSingleVariableBody(span.body);
     findings.push({

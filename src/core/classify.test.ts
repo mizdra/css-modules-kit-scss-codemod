@@ -12,7 +12,7 @@ function findings(source: string, file = FILE) {
 }
 
 describe('no findings for constructs kept as-is', () => {
-  test('produces no findings for a plain CSS file with comments, media bubbling, and non-concatenating nesting', () => {
+  test('produces no findings for a plain CSS file with comments, media bubbling, and nesting', () => {
     const source = dedent`
       .a {
         color: red;
@@ -25,6 +25,7 @@ describe('no findings for constructs kept as-is', () => {
         &:hover { color: green; }
         & .child { color: purple; }
         &.active { color: orange; }
+        &_bar { color: yellow; }
       }
     `;
 
@@ -121,54 +122,6 @@ describe('convert findings', () => {
       { file: FILE, line: 1, column: 1, syntax: '@warn', action: { kind: 'convert', stage: 'at-statements' } },
       { file: FILE, line: 2, column: 1, syntax: '@error', action: { kind: 'convert', stage: 'at-statements' } },
       { file: FILE, line: 3, column: 1, syntax: '@debug', action: { kind: 'convert', stage: 'at-statements' } },
-    ]);
-  });
-
-  test('classifies a single-selector `&` concatenation as convertible by the nesting stage', () => {
-    const source = dedent`
-      .a {
-        &_bar { color: red; }
-      }
-    `;
-
-    expect(findings(source)).toEqual([
-      {
-        file: FILE,
-        line: 2,
-        column: 3,
-        syntax: 'selector concatenation',
-        action: { kind: 'convert', stage: 'nesting' },
-      },
-    ]);
-  });
-
-  test('classifies `&` concatenation in one branch of a multi-selector rule', () => {
-    expect(findings('.a, &_b {\n  color: red;\n}\n')).toEqual([
-      {
-        file: FILE,
-        line: 1,
-        column: 5,
-        syntax: 'selector concatenation',
-        action: { kind: 'convert', stage: 'nesting' },
-      },
-    ]);
-  });
-
-  test('classifies `&` concatenation inside a functional pseudo-class', () => {
-    const source = dedent`
-      .a {
-        &:not(&_active) { color: red; }
-      }
-    `;
-
-    expect(findings(source)).toEqual([
-      {
-        file: FILE,
-        line: 2,
-        column: 9,
-        syntax: 'selector concatenation',
-        action: { kind: 'convert', stage: 'nesting' },
-      },
     ]);
   });
 
@@ -325,6 +278,18 @@ describe('convert findings', () => {
     ]);
     expect(findings('[data-#{$name}] { color: red; }\n')).toEqual([
       { file: FILE, line: 1, column: 7, syntax: 'interpolation', action: { kind: 'convert', stage: 'interpolation' } },
+    ]);
+  });
+
+  test('classifies interpolation in a `&`-concatenated selector suffix', () => {
+    const source = dedent`
+      .a {
+        &-#{$n} { color: red; }
+      }
+    `;
+
+    expect(findings(source)).toEqual([
+      { file: FILE, line: 2, column: 5, syntax: 'interpolation', action: { kind: 'convert', stage: 'interpolation' } },
     ]);
   });
 
@@ -701,24 +666,6 @@ describe('unsupported findings', () => {
     ]);
   });
 
-  test('rejects `&` concatenation whose suffix contains interpolation', () => {
-    const source = dedent`
-      .a {
-        &-#{$n} { color: red; }
-      }
-    `;
-
-    expect(findings(source)).toEqual([
-      {
-        file: FILE,
-        line: 2,
-        column: 3,
-        syntax: 'selector concatenation with interpolation',
-        action: { kind: 'unsupported', milestone: 'never' },
-      },
-    ]);
-  });
-
   test('rejects a call through an unresolved namespace', () => {
     expect(findings('.a { width: ns.fn(1px); }\n')).toEqual([
       {
@@ -768,19 +715,20 @@ describe('positions', () => {
   test('reports the exact line and column of a selector-level finding in a multi-line file', () => {
     const source = dedent`
       .a {
-        &_bar {
-          color: red;
-        }
+        color: red;
+      }
+      .b {
+        %foo { color: blue; }
       }
     `;
 
     expect(findings(source)).toEqual([
       {
         file: FILE,
-        line: 2,
+        line: 5,
         column: 3,
-        syntax: 'selector concatenation',
-        action: { kind: 'convert', stage: 'nesting' },
+        syntax: 'placeholder selector',
+        action: { kind: 'unsupported', milestone: 'never' },
       },
     ]);
   });
@@ -814,24 +762,15 @@ describe('multiple findings in one file', () => {
     const source = dedent`
       // note
       .a {
-        &_bar {
-          color: $a + $b;
-        }
+        color: $a + $b;
       }
       @warn "x";
     `;
 
     expect(findings(source)).toEqual([
       { file: FILE, line: 1, column: 1, syntax: 'silent comment', action: { kind: 'convert', stage: 'comments' } },
-      {
-        file: FILE,
-        line: 3,
-        column: 3,
-        syntax: 'selector concatenation',
-        action: { kind: 'convert', stage: 'nesting' },
-      },
-      { file: FILE, line: 4, column: 15, syntax: 'arithmetic', action: { kind: 'convert', stage: 'expressions' } },
-      { file: FILE, line: 7, column: 1, syntax: '@warn', action: { kind: 'convert', stage: 'at-statements' } },
+      { file: FILE, line: 3, column: 13, syntax: 'arithmetic', action: { kind: 'convert', stage: 'expressions' } },
+      { file: FILE, line: 5, column: 1, syntax: '@warn', action: { kind: 'convert', stage: 'at-statements' } },
     ]);
   });
 });
