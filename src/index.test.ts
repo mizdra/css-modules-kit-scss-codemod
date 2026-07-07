@@ -119,3 +119,8 @@ test('accepts a --json option on todo', async () => {
   const result = await run(['todo', '--json', 'x']);
   expect(result.exitCode).toBe(1);
 });
+
+test('accepts repeatable --load-path without a usage error', async () => {
+  const result = await run(['analyze', '--load-path', 'styles', '--load-path', 'vendor', 'src/**/*.scss']);
+  expect(result.exitCode).toBe(1);
+});

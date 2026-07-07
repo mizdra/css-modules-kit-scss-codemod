@@ -1,8 +1,7 @@
 import { realpathSync } from 'node:fs';
-import { ResolverFactory } from 'oxc-resolver';
 import type { Root } from 'postcss';
 import type { Diagnostic } from './diagnostic.ts';
-import { extractImportStatements, resolveSassSpecifier, type ImportStatement } from './resolve.ts';
+import { createSassResolver, extractImportStatements, resolveSassSpecifier, type ImportStatement } from './resolve.ts';
 
 export interface ResolvedImport {
   readonly statement: ImportStatement;
@@ -51,6 +50,11 @@ function buildRealPathIndex(parsedFiles: ReadonlyMap<string, Root>): Map<string,
   return index;
 }
 
+export interface BuildModuleGraphOptions {
+  /** Directories to resolve specifiers from when relative and node_modules resolution find nothing (dart-sass loadPaths equivalent, `--load-path`). */
+  readonly loadPaths?: readonly string[];
+}
+
 /**
  * Extracts `@use`/`@forward`/Sass `@import` statements from every file in `parsedFiles` and
  * resolves them into a module graph (design doc §5.1). `parsedFiles` is the target file set:
@@ -60,11 +64,15 @@ function buildRealPathIndex(parsedFiles: ReadonlyMap<string, Root>): Map<string,
  * ignored — no edge, no diagnostic. A specifier that fails to resolve, or resolves ambiguously,
  * produces a `Diagnostic` (fail-closed).
  */
-export function buildModuleGraph(parsedFiles: ReadonlyMap<string, Root>): {
+export function buildModuleGraph(
+  parsedFiles: ReadonlyMap<string, Root>,
+  options: BuildModuleGraphOptions = {},
+): {
   graph: ModuleGraph;
   diagnostics: Diagnostic[];
 } {
-  const resolver = new ResolverFactory({ extensions: [] });
+  const resolver = createSassResolver();
+  const loadPaths = options.loadPaths ?? [];
   const realPathIndex = buildRealPathIndex(parsedFiles);
   const diagnostics: Diagnostic[] = [];
   const edges = new Map<string, ResolvedImport[]>();
@@ -74,7 +82,7 @@ export function buildModuleGraph(parsedFiles: ReadonlyMap<string, Root>): {
     const resolvedImports: ResolvedImport[] = [];
 
     for (const statement of statements) {
-      const result = resolveSassSpecifier(importer, statement.specifier, resolver);
+      const result = resolveSassSpecifier(importer, statement.specifier, resolver, loadPaths);
       if (!result.ok) {
         diagnostics.push(diagnosticFor(statement, result.reason, result.candidates));
         continue;

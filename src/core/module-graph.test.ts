@@ -99,6 +99,48 @@ describe('buildModuleGraph', () => {
     ]);
   });
 
+  test('ignores a reference resolved into node_modules without an edge or a diagnostic', async () => {
+    await using fixture = await createFixture({
+      'consumer.module.scss': dedent`
+        @use 'pkg/theme';
+      `,
+      'node_modules': {
+        pkg: {
+          '_theme.scss': dedent`
+            $primary: #06f;
+          `,
+        },
+      },
+    });
+    const parsedFiles = await parsedFilesOf(fixture, ['consumer.module.scss']);
+
+    const { graph, diagnostics } = buildModuleGraph(parsedFiles);
+
+    expect(diagnostics).toEqual([]);
+    expect(graph.edges.size).toBe(0);
+  });
+
+  test('passes loadPaths through to resolution', async () => {
+    await using fixture = await createFixture({
+      'consumer.module.scss': dedent`
+        @use 'theme';
+      `,
+      'styles': {
+        '_theme.scss': dedent`
+          $primary: #06f;
+        `,
+      },
+    });
+    const parsedFiles = await parsedFilesOf(fixture, ['consumer.module.scss', 'styles/_theme.scss']);
+
+    const { graph, diagnostics } = buildModuleGraph(parsedFiles, { loadPaths: [fixture.getPath('styles')] });
+
+    expect(diagnostics).toEqual([]);
+    const edges = graph.edges.get(fixture.getPath('consumer.module.scss'));
+    expect.assert(edges !== undefined);
+    expect(edges.map((edge) => edge.resolvedPath)).toEqual([fixture.getPath('styles/_theme.scss')]);
+  });
+
   test('reports a diagnostic for an ambiguous candidate', async () => {
     await using fixture = await createFixture({
       'consumer.module.scss': dedent`

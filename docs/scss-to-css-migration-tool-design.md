@@ -93,6 +93,8 @@ dart-sass、resolver、各 postcss プラグインは dependencies (`^x.y.z`) �
 
 module graph は、対象 glob に含まれる各ファイルの AST から `@use`・`@forward`・Sass `@import` を抽出し、bundler-compatible resolver で specifier を解決して importer から imported への edge を構築する。resolver の実装と設定はレポートに記録する。対象 glob の範囲外、`--exclude` に一致する、または `node_modules` 配下にある参照先は graph 上に存在しないものとして無視し、そのファイルを解析・変換しない。
 
+specifier の解決順は (1) importer からの相対解決 → (2) bare specifier (`./`・`../`・`/` で始まらない) のみ node_modules 解決 → (3) `--load-path <dir>` で指定した各ディレクトリからの解決、で first-match-wins とする。この順序は Sass JS API の current importer → importers → loadPaths の解決順に対応する ((2) は、scss-codemod のユーザは bundler を使う前提であるため、sass-loader などの bundler 連携 importer と同様に node_modules からも解決するもの)。node_modules 解決は oxc-resolver の `modules: ['node_modules']`・`mainFields: ['sass', 'style']`・`conditionNames: ['sass', 'style']` (sass-loader の enhanced-resolve 設定に準拠) で行い、通常の candidate に加えて raw specifier そのもの (`@use 'pkg'` → package.json の sass/style field 経由) も試す。解決結果が `.scss`/`.css` で終わらない場合は match とみなさない (fail-closed)。`--load-path` は dart-sass の loadPaths 相当。
+
 ### 5.2 値の形の静的検査
 
 codemod は値を評価しないが、変換の適用条件の判定に「値の形」が必要な場面がある (例: 除算 `math.div($a, $b)` を `calc($a / $b)` へ写像してよいのは除数が unitless number のときだけ)。この判定は、**対象変数のすべてのトップレベル宣言の値リテラルを構文的に検査する**ことで行う (評価はしない)。宣言値がリテラルでない・形が確認できない場合は fail-closed でエラーにする。
@@ -151,12 +153,12 @@ codemod は値を評価しないが、変換の適用条件の判定に「値の
 ## 7. CLI 設計
 
 ```
-cmk-scss-codemod analyze <patterns...> [--exclude <pattern>...] [--json]
-cmk-scss-codemod convert <stage> <patterns...> [--exclude <pattern>...]
+cmk-scss-codemod analyze <patterns...> [--exclude <pattern>...] [--load-path <dir>...] [--json]
+cmk-scss-codemod convert <stage> <patterns...> [--exclude <pattern>...] [--load-path <dir>...]
                                       # stage: comments | at-statements | expressions | colors |
                                       #        modules | mixins | interpolation | to-css
-cmk-scss-codemod verify <patterns...> [--exclude <pattern>...] [--against <git-rev>]
-cmk-scss-codemod todo <patterns...> [--exclude <pattern>...] [--json]
+cmk-scss-codemod verify <patterns...> [--exclude <pattern>...] [--load-path <dir>...] [--against <git-rev>]
+cmk-scss-codemod todo <patterns...> [--exclude <pattern>...] [--load-path <dir>...] [--json]
 ```
 
 - **対象範囲**: 1 つ以上の glob を位置引数で受け取る (例: `cmk-scss-codemod convert modules "**/*.module.scss"`)。`--exclude` は複数指定でき、一致したファイルを明示的に除外する。`node_modules` 配下は指定 glob に一致しても常にデフォルトで除外する。対象 glob の範囲外にあるファイルは module graph の構築時にも存在しないものとして無視する。
@@ -360,7 +362,7 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 - [x] **Step 2: core/collect + core/diagnostic** — `node:fs/promises` の `glob` による glob 収集、`--exclude`、`node_modules` 常時除外。`Diagnostic` 型 (file/line/column/syntax/milestone/message/hint) と人間向け・JSON 整形 (8c8413f, 2d1ee9d)
 - [x] **Step 3: core/parse** — postcss-scss ラッパ。パース失敗の Diagnostic 化。postcss / postcss-scss を dependencies に追加 ([§5.1](#51-パーサー構成)) (26ac783)
 - [x] **Step 4: core/classify (構文分類 = whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-構文) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知 (c67d801)
-- [x] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → Sass candidate 展開 → oxc-resolver で解決。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成)) (853a55e)
+- [x] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → Sass candidate 展開 → oxc-resolver で解決 (相対 → bare specifier の node_modules → `--load-path` の順)。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成)) (853a55e)
 - [ ] **Step 6: core/partial** — partial 分類 (definition-only / style-emitting / mixed。[§9.1](#91-partial-の検出と分類))
 - [ ] **Step 7: core/sass-compile** — dart-sass (`sass` を dependencies に追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定
 - [ ] **Step 8: commands/analyze 統合** — Step 2–7 を組み合わせ、人間向け出力と `--json` を実装。project fixture (複数ファイル構成) による e2e テスト

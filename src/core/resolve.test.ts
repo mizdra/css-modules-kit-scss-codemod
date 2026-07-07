@@ -1,9 +1,8 @@
 import dedent from 'dedent';
 import { createFixture } from 'fs-fixture';
-import { ResolverFactory } from 'oxc-resolver';
 import { expect, test, describe } from 'vite-plus/test';
 import { parseScss } from './parse.ts';
-import { expandSassCandidates, extractImportStatements, resolveSassSpecifier } from './resolve.ts';
+import { createSassResolver, expandSassCandidates, extractImportStatements, resolveSassSpecifier } from './resolve.ts';
 
 const FILE = '/project/a.module.scss';
 
@@ -89,7 +88,7 @@ describe('resolveSassSpecifier', () => {
         $primary: #06f;
       `,
     });
-    const resolver = new ResolverFactory({ extensions: [] });
+    const resolver = createSassResolver();
 
     const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), './theme', resolver);
 
@@ -105,7 +104,7 @@ describe('resolveSassSpecifier', () => {
         `,
       },
     });
-    const resolver = new ResolverFactory({ extensions: [] });
+    const resolver = createSassResolver();
 
     const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), './theme', resolver);
 
@@ -124,7 +123,7 @@ describe('resolveSassSpecifier', () => {
         `,
       },
     });
-    const resolver = new ResolverFactory({ extensions: [] });
+    const resolver = createSassResolver();
 
     const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), './theme', resolver);
 
@@ -137,7 +136,7 @@ describe('resolveSassSpecifier', () => {
       'theme.scss': '',
       '_theme.scss': '',
     });
-    const resolver = new ResolverFactory({ extensions: [] });
+    const resolver = createSassResolver();
 
     const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), './theme', resolver);
 
@@ -150,7 +149,7 @@ describe('resolveSassSpecifier', () => {
     await using fixture = await createFixture({
       'a.module.scss': '',
     });
-    const resolver = new ResolverFactory({ extensions: [] });
+    const resolver = createSassResolver();
 
     const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), './missing', resolver);
 
@@ -164,5 +163,140 @@ describe('resolveSassSpecifier', () => {
       './missing/index.scss',
       './missing/_index.scss',
     ]);
+  });
+
+  test('resolves a bare specifier into node_modules', async () => {
+    await using fixture = await createFixture({
+      'a.module.scss': '',
+      'node_modules': {
+        pkg: {
+          '_theme.scss': dedent`
+            $primary: #06f;
+          `,
+        },
+      },
+    });
+    const resolver = createSassResolver();
+
+    const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), 'pkg/theme', resolver);
+
+    expect(result).toEqual({ ok: true, path: fixture.getPath('node_modules/pkg/_theme.scss') });
+  });
+
+  test('resolves a bare package specifier via the package.json sass field', async () => {
+    await using fixture = await createFixture({
+      'a.module.scss': '',
+      'node_modules': {
+        pkg: {
+          'package.json': JSON.stringify({ name: 'pkg', main: './index.js', sass: './main.scss' }),
+          'index.js': '',
+          'main.scss': dedent`
+            $primary: #06f;
+          `,
+        },
+      },
+    });
+    const resolver = createSassResolver();
+
+    const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), 'pkg', resolver);
+
+    expect(result).toEqual({ ok: true, path: fixture.getPath('node_modules/pkg/main.scss') });
+  });
+
+  test('does not match a package entry that resolves to a non-scss file', async () => {
+    await using fixture = await createFixture({
+      'a.module.scss': '',
+      'node_modules': {
+        pkg: {
+          'package.json': JSON.stringify({ name: 'pkg', sass: './index.js' }),
+          'index.js': '',
+        },
+      },
+    });
+    const resolver = createSassResolver();
+
+    const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), 'pkg', resolver);
+
+    expect.assert(result.ok === false);
+    expect(result.reason).toBe('not-found');
+  });
+
+  test('resolves via a load path', async () => {
+    await using fixture = await createFixture({
+      'a.module.scss': '',
+      'styles': {
+        '_theme.scss': dedent`
+          $primary: #06f;
+        `,
+      },
+    });
+    const resolver = createSassResolver();
+
+    const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), 'theme', resolver, [
+      fixture.getPath('styles'),
+    ]);
+
+    expect(result).toEqual({ ok: true, path: fixture.getPath('styles/_theme.scss') });
+  });
+
+  test('prefers a relative match over a load path match', async () => {
+    await using fixture = await createFixture({
+      'a.module.scss': '',
+      '_theme.scss': '',
+      'styles': {
+        '_theme.scss': '',
+      },
+    });
+    const resolver = createSassResolver();
+
+    const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), 'theme', resolver, [
+      fixture.getPath('styles'),
+    ]);
+
+    expect(result).toEqual({ ok: true, path: fixture.getPath('_theme.scss') });
+  });
+
+  test('prefers a node_modules match over a load path match', async () => {
+    await using fixture = await createFixture({
+      'a.module.scss': '',
+      'node_modules': {
+        pkg: {
+          '_theme.scss': '',
+        },
+      },
+      'styles': {
+        pkg: {
+          '_theme.scss': '',
+        },
+      },
+    });
+    const resolver = createSassResolver();
+
+    const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), 'pkg/theme', resolver, [
+      fixture.getPath('styles'),
+    ]);
+
+    expect(result).toEqual({ ok: true, path: fixture.getPath('node_modules/pkg/_theme.scss') });
+  });
+
+  test('reports ambiguity within a load path directory', async () => {
+    await using fixture = await createFixture({
+      'a.module.scss': '',
+      'styles': {
+        'theme.scss': '',
+        '_theme.scss': '',
+      },
+    });
+    const resolver = createSassResolver();
+
+    const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), 'theme', resolver, [
+      fixture.getPath('styles'),
+    ]);
+
+    expect.assert(result.ok === false);
+    expect(result.reason).toBe('ambiguous');
+    expect(result.candidates.sort()).toEqual(
+      [fixture.getPath('styles/_theme.scss'), fixture.getPath('styles/theme.scss')].sort(),
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import type { ResolverFactory } from 'oxc-resolver';
+import { ResolverFactory } from 'oxc-resolver';
 import type { AtRule, Root } from 'postcss';
 import { isPlainCssImport } from './classify.ts';
 
@@ -148,35 +148,89 @@ export type ResolveResult =
   | { readonly ok: true; readonly path: string }
   | { readonly ok: false; readonly reason: 'not-found' | 'ambiguous'; readonly candidates: string[] };
 
-/** Resolves every candidate in `candidates` from `dir`, returning the distinct paths that exist. */
-function resolveTier(dir: string, candidates: readonly string[], resolver: ResolverFactory): string[] {
-  const resolved = new Set<string>();
-  for (const candidate of candidates) {
-    const result = resolver.sync(dir, `./${candidate}`);
-    if (result.path !== undefined) resolved.add(result.path);
-  }
-  return [...resolved];
+/**
+ * Creates the resolver shared by all Sass specifier resolution. The `sass`/`style` main fields
+ * and export conditions follow sass-loader's enhanced-resolve configuration, so bare specifiers
+ * resolve into node_modules packages the way bundlers resolve them.
+ */
+export function createSassResolver(): ResolverFactory {
+  return new ResolverFactory({
+    extensions: [],
+    modules: ['node_modules'],
+    mainFields: ['sass', 'style'],
+    conditionNames: ['sass', 'style'],
+  });
+}
+
+/** A specifier that is neither relative nor absolute, i.e. subject to node_modules resolution. */
+function isBareSpecifier(specifier: string): boolean {
+  return !specifier.startsWith('./') && !specifier.startsWith('../') && !specifier.startsWith('/');
 }
 
 /**
- * Resolves a Sass module specifier relative to `importer` (Sass is relative-first; load paths
- * are not supported in M0). Candidates are tried tier by tier ({@link expandSassCandidates}):
- * once a tier matches at least one file, later tiers are not tried. Multiple distinct matches
- * within a tier are `ambiguous` (fail-closed), mirroring Sass's own behavior for e.g. `theme.scss`
- * and `_theme.scss` coexisting.
+ * Tries the candidate tiers of one resolution mechanism from `dir`. Returns the single match of
+ * the first tier that matches anything, `ambiguous` when that tier matches several distinct files
+ * (fail-closed, mirroring Sass's own error for e.g. `theme.scss` and `_theme.scss` coexisting),
+ * or `undefined` when nothing matches so the caller can fall through to the next mechanism.
  */
-export function resolveSassSpecifier(importer: string, specifier: string, resolver: ResolverFactory): ResolveResult {
+function resolveMechanism(
+  dir: string,
+  tiers: readonly (readonly string[])[],
+  requestOf: (candidate: string) => string,
+  resolver: ResolverFactory,
+): ResolveResult | undefined {
+  for (const tier of tiers) {
+    const resolved = new Set<string>();
+    for (const candidate of tier) {
+      const result = resolver.sync(dir, requestOf(candidate));
+      // A resolved path that is not a Sass-loadable file (e.g. a package entry pointing at
+      // `.js`) is not a match (fail-closed guard for package-entry resolution).
+      if (result.path !== undefined && (result.path.endsWith('.scss') || result.path.endsWith('.css'))) {
+        resolved.add(result.path);
+      }
+    }
+    const paths = [...resolved];
+    if (paths.length === 1) return { ok: true, path: paths[0] };
+    if (paths.length > 1) return { ok: false, reason: 'ambiguous', candidates: paths };
+  }
+  return undefined;
+}
+
+/**
+ * Resolves a Sass module specifier through three mechanisms, first match wins (matching the
+ * Sass JS API's importer order: current importer → importers → loadPaths):
+ *
+ * 1. relative to `importer` (Sass is relative-first),
+ * 2. for bare specifiers only: node_modules, the way bundlers resolve them — the raw specifier
+ *    is its own tier so `@use 'pkg'` can resolve through package.json's `sass`/`style` entry,
+ * 3. each directory in `loadPaths` in order (dart-sass loadPaths equivalent).
+ *
+ * Within a mechanism, candidates are tried tier by tier ({@link expandSassCandidates}): once a
+ * tier matches at least one file, later tiers are not tried, and multiple distinct matches
+ * within a tier are `ambiguous` (fail-closed).
+ */
+export function resolveSassSpecifier(
+  importer: string,
+  specifier: string,
+  resolver: ResolverFactory,
+  loadPaths: readonly string[] = [],
+): ResolveResult {
   const { fileCandidates, indexCandidates } = expandSassCandidates(specifier);
-  const dir = dirname(importer);
+  const relativeTiers = [fileCandidates, indexCandidates];
+  const asRelativeRequest = (candidate: string): string => `./${candidate}`;
 
-  const tier1 = resolveTier(dir, fileCandidates, resolver);
-  if (tier1.length === 1) return { ok: true, path: tier1[0] };
-  if (tier1.length > 1) return { ok: false, reason: 'ambiguous', candidates: tier1 };
+  const relative = resolveMechanism(dirname(importer), relativeTiers, asRelativeRequest, resolver);
+  if (relative) return relative;
 
-  if (indexCandidates.length > 0) {
-    const tier2 = resolveTier(dir, indexCandidates, resolver);
-    if (tier2.length === 1) return { ok: true, path: tier2[0] };
-    if (tier2.length > 1) return { ok: false, reason: 'ambiguous', candidates: tier2 };
+  if (isBareSpecifier(specifier)) {
+    const nodeModulesTiers = [fileCandidates, [specifier], indexCandidates];
+    const fromNodeModules = resolveMechanism(dirname(importer), nodeModulesTiers, (candidate) => candidate, resolver);
+    if (fromNodeModules) return fromNodeModules;
+  }
+
+  for (const loadPath of loadPaths) {
+    const fromLoadPath = resolveMechanism(loadPath, relativeTiers, asRelativeRequest, resolver);
+    if (fromLoadPath) return fromLoadPath;
   }
 
   return { ok: false, reason: 'not-found', candidates: [...fileCandidates, ...indexCandidates] };

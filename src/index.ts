@@ -25,8 +25,9 @@ function notImplemented(io: CliIo, message: string): number {
 
 function runAnalyze(args: string[], io: CliIo): number {
   const parsed = parseCommandArgs('analyze', args, {
-    exclude: { type: 'string', multiple: true },
-    json: { type: 'boolean' },
+    'exclude': { type: 'string', multiple: true },
+    'load-path': { type: 'string', multiple: true },
+    'json': { type: 'boolean' },
   });
   if (!parsed.ok) return usageError(io, parsed.message);
   if (parsed.positionals.length === 0) {
@@ -37,7 +38,8 @@ function runAnalyze(args: string[], io: CliIo): number {
 
 function runConvert(args: string[], io: CliIo): number {
   const parsed = parseCommandArgs('convert', args, {
-    exclude: { type: 'string', multiple: true },
+    'exclude': { type: 'string', multiple: true },
+    'load-path': { type: 'string', multiple: true },
   });
   if (!parsed.ok) return usageError(io, parsed.message);
 
@@ -63,8 +65,9 @@ function runConvert(args: string[], io: CliIo): number {
 
 function runVerify(args: string[], io: CliIo): number {
   const parsed = parseCommandArgs('verify', args, {
-    exclude: { type: 'string', multiple: true },
-    against: { type: 'string' },
+    'exclude': { type: 'string', multiple: true },
+    'load-path': { type: 'string', multiple: true },
+    'against': { type: 'string' },
   });
   if (!parsed.ok) return usageError(io, parsed.message);
   if (parsed.positionals.length === 0) {
@@ -75,8 +78,9 @@ function runVerify(args: string[], io: CliIo): number {
 
 function runTodo(args: string[], io: CliIo): number {
   const parsed = parseCommandArgs('todo', args, {
-    exclude: { type: 'string', multiple: true },
-    json: { type: 'boolean' },
+    'exclude': { type: 'string', multiple: true },
+    'load-path': { type: 'string', multiple: true },
+    'json': { type: 'boolean' },
   });
   if (!parsed.ok) return usageError(io, parsed.message);
   if (parsed.positionals.length === 0) {
