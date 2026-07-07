@@ -27,7 +27,7 @@ CSS は描画に直結するため、**移行の安全性を最重視する**。
 ### 前提
 
 - 対象は SCSS 記法のみ。インデント記法 (`.sass`) は対象外
-- 対象コードは dart-sass でコンパイルできる (できないファイルは analyze が報告する)
+- 変換前のコードベースは bundler (および bundler 経由の sass コンパイラ) でエラーなく bundle できる ([§3](#3-設計指針) 指針 4)。analyze のコンパイル可否検査は、この前提が満たされていることのサニティチェックとして働く
 - ユーザは bundler と minifier を使っている (CSS Modules は bundler とセットで使うものであるため)。たとえば「`//` → `/* */` 変換でコメントが CSS 出力に残る」ような差分は minify で消えるため安全とみなす
 - 変換後、ユーザのビルドは Sass から PostCSS プラグイン列 (postcss-mixins → postcss-simple-vars → postcss-nested。古いブラウザをサポートする場合は後段に postcss-preset-env を追加。[§6.1](#61-式関数の-css-への写像)) に切り替わる。設定の書き換え自体はユーザに一任し、ツールは案内のみ出力する
 
@@ -164,7 +164,7 @@ cmk-scss-codemod todo <patterns...> [--exclude <pattern>...] [--load-path <dir>.
 
 - **対象範囲**: 1 つ以上の glob を位置引数で受け取る (例: `cmk-scss-codemod convert modules "**/*.module.scss"`)。`--exclude` は複数指定でき、一致したファイルを明示的に除外する。`node_modules` 配下は指定 glob に一致しても常にデフォルトで除外する。対象 glob の範囲外にあるファイルは module graph の構築時にも存在しないものとして無視する。
 - **解決設定**: ユーザの bundler / sass 設定のうち specifier 解決に影響するものは `--load-path <dir>` (dart-sass の loadPaths 相当) と `--alias <from=to>` (bundler の `resolve.alias` 相当) で codemod に伝える ([§5.1](#51-パーサー構成))。いずれも repeatable。
-- **`analyze`**: 変換せず分析だけ行う。コンパイル不能ファイル、stage × ファイルの適用可否と安全性ラベル、module graph と partial の分類、生成名 (namespace 剥がし後の変数名・mixin 名) の横断衝突検査、todo 対象の列挙。
+- **`analyze`**: 変換せず分析だけ行う。コンパイル不能ファイル (稼働中のコード前提が満たされていることのサニティチェック。[§3](#3-設計指針) 指針 4)、stage × ファイルの適用可否と安全性ラベル、module graph と partial の分類、生成名 (namespace 剥がし後の変数名・mixin 名) の横断衝突検査、todo 対象の列挙。
 - **`convert <stage>`**: 指定した stage を glob で選択した対象範囲へ一括適用する ([§8](#8-stage-の設計))。順序制約に違反する指定はエラー。機械検証つきの stage は変換前後の dart-sass 出力比較を自動実行し、不一致なら書き込まず中断する。
 - **`verify`**: end-to-end の differential comparison ([§10](#10-verify-の設計))。
 - **`todo`**: 変換できない箇所の洗い出しと修正ヒントの出力 ([§11](#11-todo-変換できない箇所の洗い出し))。
