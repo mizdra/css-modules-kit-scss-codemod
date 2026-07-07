@@ -39,7 +39,8 @@
     "postcss": "^8.5.16",
     "postcss-scss": "^4.0.9",
     "postcss-selector-parser": "^7.1.4",
-    "postcss-value-parser": "^4.2.0"
+    "postcss-value-parser": "^4.2.0",
+    "sass": "^1.101.0"
   },
   "devDependencies": {
     "@mizdra/oxfmt-config": "^0.2.0",
