@@ -34,8 +34,11 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "css-functions-list": "^3.3.3",
     "postcss": "^8.5.16",
-    "postcss-scss": "^4.0.9"
+    "postcss-scss": "^4.0.9",
+    "postcss-selector-parser": "^7.1.4",
+    "postcss-value-parser": "^4.2.0"
   },
   "devDependencies": {
     "@mizdra/oxfmt-config": "^0.2.0",

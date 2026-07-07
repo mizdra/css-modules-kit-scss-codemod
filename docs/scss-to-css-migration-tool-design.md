@@ -3,7 +3,7 @@
 - Status: 実装中 (M0。進捗は [§13.2](#132-実装チェックリスト-m0) を参照)
 - 対象リポジトリ: `mizdra/css-modules-kit-scss-codemod` (独立リポジトリ)
 - パッケージ名: `@css-modules-kit/scss-codemod`
-- 最終更新: 2026-07-06
+- 最終更新: 2026-07-07
 
 ## 1. 概要
 
@@ -51,8 +51,8 @@ CSS は描画に直結するため、**移行の安全性を最重視する**。
 
 ## 3. 設計指針
 
-1. **安全な変換**。変換対象として定義された構文の一覧 ([§6](#6-対応する-sass-部分集合) の表) に載っている構文だけを変換し、載っていない構文は — 一見無害に見えても — 素通しせずエラーにする (whitelist 方式・fail-closed)。Sass の値の意味論は再実装しない: 式や関数は codemod が値を計算するのではなく CSS の対応物へ写像し ([§6.1](#61-式関数の-css-への写像))、計算は既存の評価器 (Sass ビルド・ブラウザ・minifier・verify) に任せる。
-2. **コーディングスタイルの保持**。共通化のためのコード (変数・mixin・ネスト) は共通化を維持したまま変換する。PostCSS 方言は SCSS と構文がほぼ同じため、`$var`・ネストは原則無変換で保持され、mixin もキーワードの書き換えだけで済む。整形・コメントは postcss-scss の raws で保持する。例外として、共通化の範囲がブロック内に閉じる `&` 連結 ([§6](#6-対応する-sass-部分集合)) は脱糖を許容する。
+1. **安全な変換**。変換対象として定義された構文の一覧 ([§6](#6-対応する-sass-構文) の表) に載っている構文だけを変換し、載っていない構文は — 一見無害に見えても — 素通しせずエラーにする (whitelist 方式・fail-closed)。Sass の値の意味論は再実装しない: 式や関数は codemod が値を計算するのではなく CSS の対応物へ写像し ([§6.1](#61-式関数の-css-への写像))、計算は既存の評価器 (Sass ビルド・ブラウザ・minifier・verify) に任せる。
+2. **コーディングスタイルの保持**。共通化のためのコード (変数・mixin・ネスト) は共通化を維持したまま変換する。PostCSS 方言は SCSS と構文がほぼ同じため、`$var`・ネストは原則無変換で保持され、mixin もキーワードの書き換えだけで済む。整形・コメントは postcss-scss の raws で保持する。`&` 連結 (`&_bar` 等) も無変換で保持する (脱糖は css-codemod の責務。[§12](#12-css-codemod-との境界))。
 3. **段階的な変換**。変換する項目を構文単位 (= stage 単位) でユーザが選択し、ユーザが glob で指定した対象ファイルへ一括適用する。1 stage = 1 commit で同質な diff をレビューできる。安全性の区分は選択の括りではなく、analyze が表示するラベルとする。
 
 適用単位を「1 ファイルずつ」ではなく「stage ごとに対象範囲へ一括」とするのは、複数ファイルを解析しないと変換方式が定まらない変換 (名前の衝突検査、partial と consumer の同時書き換え) があるため。対象範囲への一括適用でも stage は個別に選べるので、段階的な変換は維持される。
@@ -97,14 +97,14 @@ module graph は、対象 glob に含まれる各ファイルの AST から `@us
 
 codemod は値を評価しないが、変換の適用条件の判定に「値の形」が必要な場面がある (例: 除算 `math.div($a, $b)` を `calc($a / $b)` へ写像してよいのは除数が unitless number のときだけ)。この判定は、**対象変数のすべてのトップレベル宣言の値リテラルを構文的に検査する**ことで行う (評価はしない)。宣言値がリテラルでない・形が確認できない場合は fail-closed でエラーにする。
 
-## 6. 対応する Sass 部分集合
+## 6. 対応する Sass 構文
 
 表にない構文はすべて**エラー** (whitelist 方式なので、この表が whitelist の定義そのもの)。「M2 で対応予定」は「初期実装ではエラーにし、マイルストーン M2 ([§13](#13-実装優先順位)) で変換に対応する」の意。エラーになった構文は todo ([§11](#11-todo-変換できない箇所の洗い出し)) の出力対象になる。
 
 | Sass 構文                                                                          | 扱い                                                                                                                                                                                                                                                                          | 対応時期     |
 | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
 | ネスト (`&:hover`、at-rule bubbling)                                               | **無変換** (postcss-nested が Sass 互換のため)                                                                                                                                                                                                                                | —            |
-| `&_bar` のような連結セレクタ (`&` + 識別子の連結)                                  | 脱糖する (`.foo { &_bar {...} }` → `.foo { } .foo_bar {...}`)。連結を含む rule だけを、連結が解決される最小限の範囲で展開し、他のネストは維持する。**CMK はソース CSS からトークンを抽出するため、連結のままではクラス名を認識できない**                                      | M0           |
+| `&_bar` のような連結セレクタ (`&` + 識別子の連結)                                  | **無変換** (postcss-nested が Sass 互換のテキスト結合で処理する。[§4](#4-変換先-postcss-方言))。脱糖は css-codemod の責務 ([§12](#12-css-codemod-との境界))。連結のままでは CMK がクラス名を認識できないため、CMK の導入は css-codemod での脱糖後になる                       | —            |
 | トップレベル `$var` 宣言 (再代入含む) と参照                                       | **無変換** (同一構文。トップレベルの逐次的な再代入は simple-vars も同じ意味論で、差分があれば verify が検出する)                                                                                                                                                              | —            |
 | map / list 値の変数宣言 (`$colors: (...)`)                                         | エラー (方言・CSS に対応物がない。todo 対象)                                                                                                                                                                                                                                  | 対応予定なし |
 | `/* */` (loud comment)                                                             | そのまま                                                                                                                                                                                                                                                                      | —            |
@@ -130,16 +130,17 @@ codemod は値を評価しないが、変換の適用条件の判定に「値の
 
 式・関数は値を計算せず、CSS の対応物へ写像する。写像表 (whitelist):
 
-| Sass                                                                               | CSS                                                               | 備考                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `$a + $b` / `$a - $b` / `$a * $b`                                                  | `calc($a + $b)` 等                                                | `*` は少なくとも一方が unitless number                                                                                                                                                                     |
-| `math.div($a, $b)`、`$a / $b`                                                      | `calc($a / $b)`                                                   | 除数が unitless number のときのみ ([§5.2](#52-値の形の静的検査))。単位付き除算 (`math.div(10px, 2px)` → unitless) は CSS に安全な対応物がなくエラー                                                        |
-| `math.mod` / `math.abs` / `math.min` / `math.max` / `math.clamp` / `math.round` 等 | `mod()` / `abs()` / `min()` / `max()` / `clamp()` / `round()`     | CSS math functions                                                                                                                                                                                         |
-| `darken($c, 10%)` / `lighten($c, 10%)`                                             | `hsl(from $c h s calc(l - 10))` / `calc(l + 10)`                  | relative color syntax (RCS)。チャンネル (`l`・`s`) は number に解決されるため percentage のままでは無効 (実験で確認)。amount 引数は数値リテラルへ変換して埋め込む。amount が変数の場合はエラー (todo 対象) |
-| `saturate` / `desaturate` / `adjust-hue`                                           | `hsl(from $c h calc(s ± 10) l)` / `hsl(from $c calc(h + 30) s l)` | RCS。amount の扱いは darken と同じ                                                                                                                                                                         |
-| `rgba($c, $a)` / `transparentize` / `opacify`                                      | `rgb(from $c r g b / ...)`                                        | RCS                                                                                                                                                                                                        |
-| `color.adjust` / `color.scale`                                                     | RCS + `calc()`                                                    | scale は残余比率の calc で表現                                                                                                                                                                             |
-| `color.mix($a, $b, $w)`                                                            | `color-mix(in srgb, $a $w, $b)`                                   | 一般形は変換しない。引数が静的に評価可能な対応色形式であり、変換前後の評価結果が正規化後に strict 一致する場合のみ変換する。それ以外はエラー (todo 対象)                                                   |
+| Sass                                                                               | CSS                                                               | 備考                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `$a + $b` / `$a - $b` / `$a * $b`                                                  | `calc($a + $b)` 等                                                | `*` は少なくとも一方が unitless number                                                                                                                                                                                                                                                                             |
+| `math.div($a, $b)`、`$a / $b`                                                      | `calc($a / $b)`                                                   | 除数が unitless number のときのみ ([§5.2](#52-値の形の静的検査))。単位付き除算 (`math.div(10px, 2px)` → unitless) は CSS に安全な対応物がなくエラー                                                                                                                                                                |
+| `math.mod` / `math.abs` / `math.min` / `math.max` / `math.clamp` / `math.round` 等 | `mod()` / `abs()` / `min()` / `max()` / `clamp()` / `round()`     | CSS math functions                                                                                                                                                                                                                                                                                                 |
+| `math.ceil` / `math.floor` (global の `ceil()` / `floor()` 含む)                   | `round(up, ...)` / `round(down, ...)`                             | CSS `round()` の rounding strategy で表現                                                                                                                                                                                                                                                                          |
+| `darken($c, 10%)` / `lighten($c, 10%)`                                             | `hsl(from $c h s calc(l - 10))` / `calc(l + 10)`                  | relative color syntax (RCS)。チャンネル (`l`・`s`) は number に解決されるため percentage のままでは無効 (実験で確認)。amount 引数は数値リテラルへ変換して埋め込む。amount が変数の場合はエラー (todo 対象)                                                                                                         |
+| `saturate` / `desaturate` / `adjust-hue`                                           | `hsl(from $c h calc(s ± 10) l)` / `hsl(from $c calc(h + 30) s l)` | RCS。amount の扱いは darken と同じ                                                                                                                                                                                                                                                                                 |
+| `rgba($c, $a)` / `transparentize` / `opacify`                                      | `rgb(from $c r g b / ...)`                                        | RCS。2 引数形は構文分類 (core/classify) が引数の形で colors 対象に分類するが、`rgba(var(--rgb), 0.5)` のような plain CSS の 2 引数形 (custom property トリック) も紛れ込む。**colors stage の precondition で第 1 引数が `$var` か色リテラルであることを検査し、それ以外 (`var()` 等) は変換せずエラーにすること** |
+| `color.adjust` / `color.scale`                                                     | RCS + `calc()`                                                    | scale は残余比率の calc で表現                                                                                                                                                                                                                                                                                     |
+| `color.mix($a, $b, $w)`                                                            | `color-mix(in srgb, $a $w, $b)`                                   | 一般形は変換しない。引数が静的に評価可能な対応色形式であり、変換前後の評価結果が正規化後に strict 一致する場合のみ変換する。それ以外はエラー (todo 対象)                                                                                                                                                           |
 
 写像に伴う性質:
 
@@ -153,7 +154,7 @@ codemod は値を評価しないが、変換の適用条件の判定に「値の
 cmk-scss-codemod analyze <patterns...> [--exclude <pattern>...] [--json]
 cmk-scss-codemod convert <stage> <patterns...> [--exclude <pattern>...]
                                       # stage: comments | at-statements | expressions | colors |
-                                      #        nesting | modules | mixins | interpolation | to-css
+                                      #        modules | mixins | interpolation | to-css
 cmk-scss-codemod verify <patterns...> [--exclude <pattern>...] [--against <git-rev>]
 cmk-scss-codemod todo <patterns...> [--exclude <pattern>...] [--json]
 ```
@@ -176,22 +177,21 @@ cmk-scss-codemod todo <patterns...> [--exclude <pattern>...] [--json]
 | 2   | `at-statements` | `@error` / `@warn` / `@debug` を除去 (内容はログへ)                                                                                                                 | 構築的に等価                                                                                            | 1     |
 | 3   | `expressions`   | 演算・math 系関数を `calc()` / CSS math functions へ写像                                                                                                            | **機械検証つき** (dart-sass が静的に評価し出力が変わらないため、変換前後の出力比較で自動検証)           | 1     |
 | 4   | `colors`        | 色関数を RCS / `color-mix()` へ写像                                                                                                                                 | 移し替え (end-to-end verify で検証)。適用時からブラウザ要件が生じる ([§6.1](#61-式関数の-css-への写像)) | 1     |
-| 5   | `nesting`       | `&` 連結 (`&_bar` 等) を含む rule のみ脱糖。他のネストは無変換                                                                                                      | **機械検証つき**                                                                                        | 1     |
-| 6   | `modules`       | `@use`/`@forward`/Sass `@import` → `@import '<path>.css'`、namespace 参照の剥がし (`t.$x` → `$x`、`@include t.f` → `@include f`)、衝突時のみ prefix 付与            | 移し替え (end-to-end verify で検証)                                                                     | 2     |
-| 7   | `mixins`        | `@mixin`→`@define-mixin`、`@include`→`@mixin`、`@content`→`@mixin-content`、引数構文の写像                                                                          | 移し替え (同上)                                                                                         | 2     |
-| 8   | `interpolation` | `#{$x}` → `$(x)`                                                                                                                                                    | 移し替え (同上)                                                                                         | 2     |
-| 9   | `to-css`        | precondition (残存 Sass 専用構文ゼロ) の検査 → `.module.scss`→`.module.css`・`_x.scss`→`x.css` リネーム → TS/JS の import specifier 書き換え → ビルド設定切替の案内 | 移し替え (最終 stage)                                                                                   | 2     |
+| 5   | `modules`       | `@use`/`@forward`/Sass `@import` → `@import '<path>.css'`、namespace 参照の剥がし (`t.$x` → `$x`、`@include t.f` → `@include f`)、衝突時のみ prefix 付与            | 移し替え (end-to-end verify で検証)                                                                     | 2     |
+| 6   | `mixins`        | `@mixin`→`@define-mixin`、`@include`→`@mixin`、`@content`→`@mixin-content`、引数構文の写像                                                                          | 移し替え (同上)                                                                                         | 2     |
+| 7   | `interpolation` | `#{$x}` → `$(x)`                                                                                                                                                    | 移し替え (同上)                                                                                         | 2     |
+| 8   | `to-css`        | precondition (残存 Sass 専用構文ゼロ) の検査 → `.module.scss`→`.module.css`・`_x.scss`→`x.css` リネーム → TS/JS の import specifier 書き換え → ビルド設定切替の案内 | 移し替え (最終 stage)                                                                                   | 2     |
 
-変数と (連結以外の) ネストは無変換なので stage が存在しない。
+変数とネスト (`&` 連結含む) は無変換なので stage が存在しない。
 
 ### 8.2 2 フェーズ構造
 
 stage は「その適用後もプロジェクトが Sass でビルドできるか」で 2 つの Phase に分かれる:
 
-- **Phase 1 (`comments`, `at-statements`, `expressions`, `colors`, `nesting`)**: 出力が Sass 互換のまま。stage ごとに独立して merge・デプロイできる。
+- **Phase 1 (`comments`, `at-statements`, `expressions`, `colors`)**: 出力が Sass 互換のまま。stage ごとに独立して merge・デプロイできる。
 - **Phase 2 (`modules`, `mixins`, `interpolation`, `to-css`)**: PostCSS 方言の構文 (`@mixin f` の適用構文、`$(x)` 等) は Sass でビルドできないため、**この Phase 全体が 1 つのカットオーバー PR** になる (stage ごとの commit でレビュー可能性は維持)。`to-css` 完了時にビルド設定を Sass から postcss-mixins → postcss-simple-vars → postcss-nested へ切り替え、直後に `verify` を実行する。
 
-順序制約: `modules` は `mixins`/`interpolation` より前 (namespace 剥がしが先に済んでいないと `$(t.$x)` のような不正な写像が生まれる)。連結セレクタに interpolation を含むファイルは `nesting` stage でエラーにする (todo 対象)。`comments`/`at-statements` は任意の時点で実行できる。
+順序制約: `modules` は `mixins`/`interpolation` より前 (namespace 剥がしが先に済んでいないと `$(t.$x)` のような不正な写像が生まれる)。`comments`/`at-statements` は任意の時点で実行できる。
 
 ### 8.3 precondition 検査とエラー処理
 
@@ -313,21 +313,21 @@ css-codemod は将来の別ツール・別設計書とし、ここでは境界�
 
 - `$var` (postcss-simple-vars) → custom property / インライン展開
 - mixin (postcss-mixins) → `@custom-media` 化 (media-wrapper mixin)・展開
-- Sass 風ネスト (postcss-nested) → native CSS nesting 化。CSS Nesting の `&` は `:is(親)` 意味論で Sass のテキスト結合と一般に等価でないため、rule 単位の等価性判定はここで行う
+- Sass 風ネスト (postcss-nested) → native CSS nesting 化。CSS Nesting の `&` は `:is(親)` 意味論で Sass のテキスト結合と一般に等価でないため、rule 単位の等価性判定はここで行う。**`&` 連結 (`&_bar` 等) の脱糖もここで行う** (native CSS nesting は連結を表現できないため。scss-codemod は連結を無変換で通す)
 
 なお `$var` を custom property 化すると、色関数の引数が実行時値 (`var()`) になり postcss-preset-env の静的コンパイルが効かなくなる (RCS 等のブラウザ要件が復活する)。この点は css-codemod 側の設計で考慮が要る。
 
-scss-codemod が `&` 連結の脱糖まで行うため ([§6](#6-対応する-sass-部分集合))、**CMK の導入 (トークン認識) は scss-codemod の完了時点で可能**。css-codemod は「PostCSS プラグイン依存を外して plain CSS に近づけたい」ユーザのための後続ステップという位置づけになる。
+scss-codemod は `&` 連結を無変換で通すため ([§6](#6-対応する-sass-構文))、**連結を使っているプロジェクトでは、CMK の導入 (トークン認識) は css-codemod が連結を脱糖した後に可能になる**。css-codemod は「PostCSS プラグイン依存を外して plain CSS に近づけたい」ユーザのための後続ステップであると同時に、CMK 導入の前提ステップという位置づけになる。
 
 ## 13. 実装優先順位
 
-| マイルストーン   | 内容                                                                                                                                      |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **M0**           | CLI 骨格、analyze (部分集合判定、module graph、partial 分類)、`comments`、`at-statements`、`nesting` (前後比較検証つき)、`to-css`、`todo` |
-| **M1**           | `expressions`、`modules` (definition-only partial、namespace 剥がし、衝突検査)、`verify`                                                  |
-| **M2**           | `mixins`、`interpolation`、`colors`、style-emitting partial の `@import` 化、`@forward`                                                   |
-| **M3**           | ルール内ローカル `$var`、`@at-root` (等価になる条件を詰めてから)                                                                          |
-| **対応予定なし** | 制御構文、`@extend`、`!default`/`!global`、`@use ... with ()`、写像表にない関数 — いずれも todo の出力対象                                |
+| マイルストーン   | 内容                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| **M0**           | CLI 骨格、analyze (構文分類、module graph、partial 分類)、`comments`、`at-statements`、`to-css`、`todo`    |
+| **M1**           | `expressions`、`modules` (definition-only partial、namespace 剥がし、衝突検査)、`verify`                   |
+| **M2**           | `mixins`、`interpolation`、`colors`、style-emitting partial の `@import` 化、`@forward`                    |
+| **M3**           | ルール内ローカル `$var`、`@at-root` (等価になる条件を詰めてから)                                           |
+| **対応予定なし** | 制御構文、`@extend`、`!default`/`!global`、`@use ... with ()`、写像表にない関数 — いずれも todo の出力対象 |
 
 ### 13.1 テスト戦略
 
@@ -351,13 +351,15 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 - bin 名は **`scss-codemod`**
 - テストは `tests/` ではなく source と同階層 (`src/path/to/file.test.ts`) に置く
 - `runCli(argv, { stdout, stderr })` は Node.js の writable stream を受け取って書き込み、exit code (number) を返す
+- 「部分集合 / subset」という語はモジュール名・API に使わない。構文分類は core/classify (`classifySyntax` / `SyntaxFinding`) と呼ぶ (「Sass 部分集合」という表現が分かりにくいため。§6 のタイトルも「対応する Sass 構文」)
+- 未知の関数名の分類は **CSS whitelist 方式** (fail-closed の徹底)。[css-functions-list](https://www.npmjs.com/package/css-functions-list) (stylelint の `function-no-unknown` が使用) を CSS 関数の whitelist とし、dart-sass 組み込み (global alias 全列挙 + namespace 解決) にも CSS whitelist にも該当しない関数名はエラー (todo 対象)。CSS と Sass の両義名 (`rgba`/`min`/`if`/`invert` 等) は引数の形で判別し、判別できないものはエラー
 
 #### PR1: 基盤 + analyze (ブランチ: `m0-cli-skeleton`)
 
 - [x] **Step 1: パッケージ準備 + CLI 骨格** — bin 追加、parseArgs によるコマンド分岐 (analyze / convert / verify / todo)、stage テーブル (名前 × マイルストーン)、exit code 規約 (0 = 成功 / 1 = 未実装・診断ありで失敗 / 2 = 使い方エラー)。全コマンドは未実装スタブ (846aa4b)
 - [x] **Step 2: core/collect + core/diagnostic** — `node:fs/promises` の `glob` による glob 収集、`--exclude`、`node_modules` 常時除外。`Diagnostic` 型 (file/line/column/syntax/milestone/message/hint) と人間向け・JSON 整形 (8c8413f, 2d1ee9d)
 - [x] **Step 3: core/parse** — postcss-scss ラッパ。パース失敗の Diagnostic 化。postcss / postcss-scss を dependencies に追加 ([§5.1](#51-パーサー構成)) (26ac783)
-- [ ] **Step 4: core/subset (whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-部分集合) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知
+- [x] **Step 4: core/classify (構文分類 = whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-構文) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知 (c67d801)
 - [ ] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → Sass candidate 展開 → oxc-resolver で解決。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成))
 - [ ] **Step 6: core/partial** — partial 分類 (definition-only / style-emitting / mixed。[§9.1](#91-partial-の検出と分類))
 - [ ] **Step 7: core/sass-compile** — dart-sass (`sass` を dependencies に追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定
@@ -368,7 +370,7 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 - [ ] **Step 9: core/write** — アトミック書き込み (メモリ上で全件成功 → 同一ディレクトリの temp file 経由で置換 → I/O エラー時は best-effort ロールバック。[§7](#7-cli-設計))。atomicity のテスト ([§13.1](#131-テスト戦略))
 - [ ] **Step 10: `comments` stage** — `//` → `/* */` (postcss-scss の inline comment)。コメント内に `*/` を含む場合の扱いをテストで固定
 - [ ] **Step 11: `at-statements` stage** — `@error`/`@warn`/`@debug` を除去し、内容をログへ
-- [ ] **Step 12: `nesting` stage** — `&` 連結を含む rule のみ最小範囲で脱糖 (セレクタ解析は postcss-selector-parser、親が複数セレクタなら積展開、連結 + interpolation はエラー)。dart-sass 前後比較の機械検証つき ([§8.1](#81-stage-一覧))
+- ~~**Step 12: `nesting` stage**~~ — 方針転換により削除 (2026-07-07)。`&` 連結の脱糖は css-codemod の責務とし、scss-codemod は連結を無変換で通す ([§6](#6-対応する-sass-構文)、[§12](#12-css-codemod-との境界))
 
 #### PR3: to-css + todo
 
