@@ -8,6 +8,7 @@ import { parseScss, stringifyScss } from '../core/parse.ts';
 import { writeFilesAtomically, type FileWrite } from '../core/write.ts';
 import type { CliIo } from '../io.ts';
 import type { StageInfo } from '../stages.ts';
+import { transformAtStatements } from '../stages/at-statements.ts';
 import { transformComments } from '../stages/comments.ts';
 import type { StageTransform } from '../stages/types.ts';
 
@@ -23,7 +24,10 @@ export interface ConvertCommandOptions {
  * Stages with an implemented transform (design doc §13.2 Step 10 and later). A stage listed in
  * `STAGES` (see `../stages.ts`) but absent here is recognized by the CLI but not yet convertible.
  */
-const TRANSFORMS: ReadonlyMap<string, StageTransform> = new Map([['comments', transformComments]]);
+const TRANSFORMS: ReadonlyMap<string, StageTransform> = new Map([
+  ['comments', transformComments],
+  ['at-statements', transformAtStatements],
+]);
 
 /** Mirrors the milestone-specific wording `runConvert` used before stage transforms existed. */
 function notImplementedMessage(stage: StageInfo): string {
@@ -69,7 +73,7 @@ export async function runConvertCommand(options: ConvertCommandOptions, io: CliI
   }
 
   const diagnostics: Diagnostic[] = [];
-  const logs: string[] = [];
+  const logs: Diagnostic[] = [];
   const parsedFiles = new Map<string, ParsedFile>();
 
   const sources = await Promise.all(files.map(async (file) => readFile(file, 'utf8')));
@@ -112,7 +116,7 @@ export async function runConvertCommand(options: ConvertCommandOptions, io: CliI
   }
 
   if (logs.length > 0) {
-    io.stderr.write(`${logs.join('\n')}\n`);
+    io.stderr.write(formatDiagnostics(logs.map((log) => relativizeDiagnostic(log, cwd))));
   }
 
   io.stdout.write(`${options.stage.name}: converted ${parsedFiles.size} files (${unchangedCount} unchanged)\n`);

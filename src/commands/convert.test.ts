@@ -156,3 +156,45 @@ describe('convert comments', () => {
     expect(result.stderr).toContain('no files matched');
   });
 });
+
+describe('convert at-statements', () => {
+  test('removes @warn from a file, writes the result, and logs the removal to stderr', async () => {
+    await using fixture = await createFixture({
+      src: {
+        'a.module.scss': dedent`
+          @warn "deprecated: use $primary";
+          .a { color: red; }
+        `,
+      },
+    });
+
+    const result = await run(['convert', 'at-statements', 'src/**/*.scss'], fixture.path);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('at-statements: converted 1 files (0 unchanged)');
+    expect(result.stderr).toContain('src/a.module.scss:1:1');
+    expect(result.stderr).toContain('removed @warn "deprecated: use $primary"');
+    await expect(readFile(fixture.getPath('src/a.module.scss'), 'utf8')).resolves.toBe(dedent`
+      .a { color: red; }
+    `);
+  });
+
+  test('is idempotent: a second run reports the file as unchanged with no further logs', async () => {
+    await using fixture = await createFixture({
+      src: {
+        'a.module.scss': dedent`
+          @warn "note";
+          .a { color: red; }
+        `,
+      },
+    });
+
+    const first = await run(['convert', 'at-statements', 'src/**/*.scss'], fixture.path);
+    const second = await run(['convert', 'at-statements', 'src/**/*.scss'], fixture.path);
+
+    expect(first.exitCode).toBe(0);
+    expect(second.exitCode).toBe(0);
+    expect(second.stdout).toContain('at-statements: converted 1 files (1 unchanged)');
+    expect(second.stderr).toBe('');
+  });
+});

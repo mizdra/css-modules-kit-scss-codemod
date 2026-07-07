@@ -5,8 +5,8 @@ import type { Diagnostic } from '../core/diagnostic.ts';
 export interface StageTransformResult {
   /** Precondition failures for this file (design doc §8.3). A non-empty result blocks writing for the whole run. */
   readonly diagnostics: readonly Diagnostic[];
-  /** Human-readable notes the convert command writes to stderr (e.g. removed `@warn` content). */
-  readonly logs: readonly string[];
+  /** Informational (non-error) notes the convert command writes to stderr (e.g. removed `@warn` content). */
+  readonly logs: readonly Diagnostic[];
 }
 
 /**
