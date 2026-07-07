@@ -10,6 +10,7 @@ import type { CliIo } from '../io.ts';
 import type { StageInfo } from '../stages.ts';
 import { transformAtStatements } from '../stages/at-statements.ts';
 import { transformComments } from '../stages/comments.ts';
+import { runToCssStage } from '../stages/to-css.ts';
 import type { StageTransform } from '../stages/types.ts';
 
 export interface ConvertCommandOptions {
@@ -59,6 +60,13 @@ interface ParsedFile {
  */
 export async function runConvertCommand(options: ConvertCommandOptions, io: CliIo): Promise<number> {
   const cwd = realpathSync(io.cwd ?? process.cwd());
+
+  // `to-css` operates across two file kinds and does filesystem renames rather than a single
+  // AST-in/AST-out transform, so it doesn't fit the `TRANSFORMS` map below (see to-css.ts's doc
+  // comment).
+  if (options.stage.name === 'to-css') {
+    return runToCssStage(options, io);
+  }
 
   const transform = TRANSFORMS.get(options.stage.name);
   if (!transform) {
