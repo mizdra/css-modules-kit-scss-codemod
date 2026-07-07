@@ -124,3 +124,8 @@ test('accepts repeatable --load-path without a usage error', async () => {
   const result = await run(['analyze', '--load-path', 'styles', '--load-path', 'vendor', 'src/**/*.scss']);
   expect(result.exitCode).toBe(1);
 });
+
+test('accepts repeatable --alias without a usage error', async () => {
+  const result = await run(['analyze', '--alias', '@=src', '--alias', 'theme$=src/theme.scss', 'src/**/*.scss']);
+  expect(result.exitCode).toBe(1);
+});

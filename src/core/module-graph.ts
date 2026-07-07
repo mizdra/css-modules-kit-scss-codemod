@@ -26,6 +26,9 @@ function diagnosticFor(statement: ImportStatement): Diagnostic {
     column: statement.column,
     syntax: KIND_TO_SYNTAX[statement.kind],
     message: `cannot resolve import "${statement.specifier}"`,
+    // Under the working-codebase assumption (design doc §3, principle 4), an unresolved
+    // specifier usually means the codemod is not reproducing the bundler's configuration.
+    hint: "The bundler may resolve this specifier via a load path or alias; pass --load-path or --alias to reproduce the bundler's configuration.",
   };
 }
 
@@ -45,6 +48,8 @@ function buildRealPathIndex(parsedFiles: ReadonlyMap<string, Root>): Map<string,
 export interface BuildModuleGraphOptions {
   /** Directories to resolve specifiers from when relative and node_modules resolution find nothing (dart-sass loadPaths equivalent, `--load-path`). */
   readonly loadPaths?: readonly string[];
+  /** Bundler-style alias map (`--alias`, enhanced-resolve semantics; see `CreateSassResolverOptions`). */
+  readonly alias?: Record<string, readonly string[]>;
 }
 
 /**
@@ -63,7 +68,7 @@ export function buildModuleGraph(
   graph: ModuleGraph;
   diagnostics: Diagnostic[];
 } {
-  const resolver = createSassResolver();
+  const resolver = createSassResolver(options.alias !== undefined ? { alias: options.alias } : {});
   const loadPaths = options.loadPaths ?? [];
   const realPathIndex = buildRealPathIndex(parsedFiles);
   const diagnostics: Diagnostic[] = [];

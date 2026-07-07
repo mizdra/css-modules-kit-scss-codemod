@@ -122,6 +122,14 @@ export function possibleRequestsOf(specifier: string): string[] {
 
 export type ResolveResult = { readonly ok: true; readonly path: string } | { readonly ok: false };
 
+export interface CreateSassResolverOptions {
+  /**
+   * Bundler-style alias map (enhanced-resolve semantics: keys are prefix matches, a
+   * `$`-suffixed key matches exactly), reproducing the user's vite/webpack `resolve.alias`.
+   */
+  readonly alias?: Record<string, readonly string[]>;
+}
+
 /**
  * Creates the resolver shared by all Sass specifier resolution, configured like sass-loader's
  * enhanced-resolve resolver (utils.js at webpack/sass-loader@0e793b0), minus `.sass` (out of
@@ -130,7 +138,7 @@ export type ResolveResult = { readonly ok: true; readonly path: string } | { rea
  * conditions) are all handled by the resolver. `restrictions` rejects resolutions to
  * non-Sass-loadable files, e.g. a package `main` pointing at `.js` (fail-closed).
  */
-export function createSassResolver(): ResolverFactory {
+export function createSassResolver(options: CreateSassResolverOptions = {}): ResolverFactory {
   return new ResolverFactory({
     extensions: ['.scss', '.css'],
     mainFiles: ['_index', 'index'],
@@ -139,6 +147,9 @@ export function createSassResolver(): ResolverFactory {
     mainFields: ['sass', 'style', 'main'],
     conditionNames: ['sass', 'style'],
     restrictions: [{ regex: '\\.s?css$' }],
+    ...(options.alias !== undefined
+      ? { alias: Object.fromEntries(Object.entries(options.alias).map(([from, to]) => [from, [...to]])) }
+      : {}),
   });
 }
 

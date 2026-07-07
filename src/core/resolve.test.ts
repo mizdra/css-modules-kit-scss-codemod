@@ -278,4 +278,42 @@ describe('resolveSassSpecifier', () => {
 
     expect(result).toEqual({ ok: true, path: fixture.getPath('styles/_theme.scss') });
   });
+
+  test('resolves a specifier through a prefix alias, expanding the partial on the basename only', async () => {
+    await using fixture = await createFixture({
+      app: {
+        'a.module.scss': '',
+      },
+      src: {
+        styles: {
+          '_theme.scss': dedent`
+            $primary: #06f;
+          `,
+        },
+      },
+    });
+    const resolver = createSassResolver({ alias: { '@': [fixture.getPath('src')] } });
+
+    const result = resolveSassSpecifier(fixture.getPath('app/a.module.scss'), '@/styles/theme', resolver);
+
+    expect(result).toEqual({ ok: true, path: fixture.getPath('src/styles/_theme.scss') });
+  });
+
+  test('resolves an exact alias with a $-suffixed key', async () => {
+    await using fixture = await createFixture({
+      app: {
+        'a.module.scss': '',
+      },
+      src: {
+        'theme.scss': dedent`
+          $primary: #06f;
+        `,
+      },
+    });
+    const resolver = createSassResolver({ alias: { 'theme-pkg$': [fixture.getPath('src/theme.scss')] } });
+
+    const result = resolveSassSpecifier(fixture.getPath('app/a.module.scss'), 'theme-pkg', resolver);
+
+    expect(result).toEqual({ ok: true, path: fixture.getPath('src/theme.scss') });
+  });
 });

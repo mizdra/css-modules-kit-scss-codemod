@@ -27,6 +27,7 @@ function runAnalyze(args: string[], io: CliIo): number {
   const parsed = parseCommandArgs('analyze', args, {
     'exclude': { type: 'string', multiple: true },
     'load-path': { type: 'string', multiple: true },
+    'alias': { type: 'string', multiple: true },
     'json': { type: 'boolean' },
   });
   if (!parsed.ok) return usageError(io, parsed.message);
@@ -40,6 +41,7 @@ function runConvert(args: string[], io: CliIo): number {
   const parsed = parseCommandArgs('convert', args, {
     'exclude': { type: 'string', multiple: true },
     'load-path': { type: 'string', multiple: true },
+    'alias': { type: 'string', multiple: true },
   });
   if (!parsed.ok) return usageError(io, parsed.message);
 
@@ -67,6 +69,7 @@ function runVerify(args: string[], io: CliIo): number {
   const parsed = parseCommandArgs('verify', args, {
     'exclude': { type: 'string', multiple: true },
     'load-path': { type: 'string', multiple: true },
+    'alias': { type: 'string', multiple: true },
     'against': { type: 'string' },
   });
   if (!parsed.ok) return usageError(io, parsed.message);
@@ -80,6 +83,7 @@ function runTodo(args: string[], io: CliIo): number {
   const parsed = parseCommandArgs('todo', args, {
     'exclude': { type: 'string', multiple: true },
     'load-path': { type: 'string', multiple: true },
+    'alias': { type: 'string', multiple: true },
     'json': { type: 'boolean' },
   });
   if (!parsed.ok) return usageError(io, parsed.message);

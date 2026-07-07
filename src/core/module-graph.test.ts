@@ -95,6 +95,7 @@ describe('buildModuleGraph', () => {
         column: 1,
         syntax: '@use',
         message: 'cannot resolve import "./missing"',
+        hint: "The bundler may resolve this specifier via a load path or alias; pass --load-path or --alias to reproduce the bundler's configuration.",
       },
     ]);
   });
@@ -139,6 +140,29 @@ describe('buildModuleGraph', () => {
     const edges = graph.edges.get(fixture.getPath('consumer.module.scss'));
     expect.assert(edges !== undefined);
     expect(edges.map((edge) => edge.resolvedPath)).toEqual([fixture.getPath('styles/_theme.scss')]);
+  });
+
+  test('passes alias through to resolution', async () => {
+    await using fixture = await createFixture({
+      app: {
+        'consumer.module.scss': dedent`
+          @use '@/theme';
+        `,
+      },
+      src: {
+        '_theme.scss': dedent`
+          $primary: #06f;
+        `,
+      },
+    });
+    const parsedFiles = await parsedFilesOf(fixture, ['app/consumer.module.scss', 'src/_theme.scss']);
+
+    const { graph, diagnostics } = buildModuleGraph(parsedFiles, { alias: { '@': [fixture.getPath('src')] } });
+
+    expect(diagnostics).toEqual([]);
+    const edges = graph.edges.get(fixture.getPath('app/consumer.module.scss'));
+    expect.assert(edges !== undefined);
+    expect(edges.map((edge) => edge.resolvedPath)).toEqual([fixture.getPath('src/_theme.scss')]);
   });
 
   test('builds an edge to the partial when both theme.scss and _theme.scss exist', async () => {
