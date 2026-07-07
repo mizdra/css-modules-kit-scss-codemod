@@ -19,21 +19,13 @@ const KIND_TO_SYNTAX: Record<ImportStatement['kind'], string> = {
   import: '@import',
 };
 
-function diagnosticFor(
-  statement: ImportStatement,
-  reason: 'not-found' | 'ambiguous',
-  candidates: string[],
-): Diagnostic {
-  const message =
-    reason === 'ambiguous'
-      ? `ambiguous import "${statement.specifier}": matches ${candidates.join(', ')}`
-      : `cannot resolve import "${statement.specifier}"`;
+function diagnosticFor(statement: ImportStatement): Diagnostic {
   return {
     file: statement.file,
     line: statement.line,
     column: statement.column,
     syntax: KIND_TO_SYNTAX[statement.kind],
-    message,
+    message: `cannot resolve import "${statement.specifier}"`,
   };
 }
 
@@ -61,8 +53,8 @@ export interface BuildModuleGraphOptions {
  * I/O and parsing are the caller's responsibility (Step 8's `analyze`).
  *
  * A specifier that resolves outside `parsedFiles` (glob range or `node_modules`) is silently
- * ignored — no edge, no diagnostic. A specifier that fails to resolve, or resolves ambiguously,
- * produces a `Diagnostic` (fail-closed).
+ * ignored — no edge, no diagnostic. A specifier that fails to resolve produces a `Diagnostic`
+ * (fail-closed).
  */
 export function buildModuleGraph(
   parsedFiles: ReadonlyMap<string, Root>,
@@ -84,7 +76,7 @@ export function buildModuleGraph(
     for (const statement of statements) {
       const result = resolveSassSpecifier(importer, statement.specifier, resolver, loadPaths);
       if (!result.ok) {
-        diagnostics.push(diagnosticFor(statement, result.reason, result.candidates));
+        diagnostics.push(diagnosticFor(statement));
         continue;
       }
       const canonical = realPathIndex.get(result.path);

@@ -141,7 +141,7 @@ describe('buildModuleGraph', () => {
     expect(edges.map((edge) => edge.resolvedPath)).toEqual([fixture.getPath('styles/_theme.scss')]);
   });
 
-  test('reports a diagnostic for an ambiguous candidate', async () => {
+  test('builds an edge to the partial when both theme.scss and _theme.scss exist', async () => {
     await using fixture = await createFixture({
       'consumer.module.scss': dedent`
         @use './theme';
@@ -153,11 +153,10 @@ describe('buildModuleGraph', () => {
 
     const { graph, diagnostics } = buildModuleGraph(parsedFiles);
 
-    expect(graph.edges.size).toBe(0);
-    expect(diagnostics.length).toBe(1);
-    expect(diagnostics[0]?.file).toBe(fixture.getPath('consumer.module.scss'));
-    expect(diagnostics[0]?.syntax).toBe('@use');
-    expect(diagnostics[0]?.message).toContain('ambiguous import "./theme"');
+    expect(diagnostics).toEqual([]);
+    const edges = graph.edges.get(fixture.getPath('consumer.module.scss'));
+    expect.assert(edges !== undefined);
+    expect(edges.map((edge) => edge.resolvedPath)).toEqual([fixture.getPath('_theme.scss')]);
   });
 });
 

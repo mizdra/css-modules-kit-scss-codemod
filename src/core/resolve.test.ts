@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import { createFixture } from 'fs-fixture';
 import { expect, test, describe } from 'vite-plus/test';
 import { parseScss } from './parse.ts';
-import { createSassResolver, expandSassCandidates, extractImportStatements, resolveSassSpecifier } from './resolve.ts';
+import { createSassResolver, extractImportStatements, possibleRequestsOf, resolveSassSpecifier } from './resolve.ts';
 
 const FILE = '/project/a.module.scss';
 
@@ -57,26 +57,21 @@ describe('extractImportStatements', () => {
   });
 });
 
-describe('expandSassCandidates', () => {
-  test('expands an extension-less specifier into file and index candidates', () => {
-    expect(expandSassCandidates('theme')).toEqual({
-      fileCandidates: ['theme.scss', '_theme.scss', 'theme.css', '_theme.css'],
-      indexCandidates: ['theme/index.scss', 'theme/_index.scss'],
-    });
-  });
-
-  test('expands a specifier with .scss into exact and partial candidates', () => {
-    expect(expandSassCandidates('./theme.scss')).toEqual({
-      fileCandidates: ['./theme.scss', './_theme.scss'],
-      indexCandidates: [],
-    });
+describe('possibleRequestsOf', () => {
+  test('expands an extension-less specifier into a partial request and a plain request', () => {
+    expect(possibleRequestsOf('theme')).toEqual(['_theme', 'theme']);
   });
 
   test('adds the underscore only to the basename for a specifier with a directory part', () => {
-    expect(expandSassCandidates('./nested/theme')).toEqual({
-      fileCandidates: ['./nested/theme.scss', './nested/_theme.scss', './nested/theme.css', './nested/_theme.css'],
-      indexCandidates: ['./nested/theme/index.scss', './nested/theme/_index.scss'],
-    });
+    expect(possibleRequestsOf('./nested/theme')).toEqual(['./nested/_theme', './nested/theme']);
+  });
+
+  test('keeps the extension when adding the underscore to a .scss specifier', () => {
+    expect(possibleRequestsOf('./nested/theme.scss')).toEqual(['./nested/_theme.scss', './nested/theme.scss']);
+  });
+
+  test('returns a .css specifier as the only request', () => {
+    expect(possibleRequestsOf('./theme.css')).toEqual(['./theme.css']);
   });
 });
 
@@ -111,7 +106,7 @@ describe('resolveSassSpecifier', () => {
     expect(result).toEqual({ ok: true, path: fixture.getPath('theme/_index.scss') });
   });
 
-  test('prefers a file candidate over an index candidate', async () => {
+  test('prefers a file over a directory index', async () => {
     await using fixture = await createFixture({
       'a.module.scss': '',
       'theme.scss': dedent`
@@ -130,7 +125,7 @@ describe('resolveSassSpecifier', () => {
     expect(result).toEqual({ ok: true, path: fixture.getPath('theme.scss') });
   });
 
-  test('returns ambiguous when both theme.scss and _theme.scss exist', async () => {
+  test('prefers _theme.scss over theme.scss when both exist, like sass-loader', async () => {
     await using fixture = await createFixture({
       'a.module.scss': '',
       'theme.scss': '',
@@ -140,12 +135,10 @@ describe('resolveSassSpecifier', () => {
 
     const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), './theme', resolver);
 
-    expect.assert(result.ok === false);
-    expect(result.reason).toBe('ambiguous');
-    expect(result.candidates.sort()).toEqual([fixture.getPath('_theme.scss'), fixture.getPath('theme.scss')].sort());
+    expect(result).toEqual({ ok: true, path: fixture.getPath('_theme.scss') });
   });
 
-  test('returns not-found for a reference that matches no candidate', async () => {
+  test('returns not-found for a reference that matches no request', async () => {
     await using fixture = await createFixture({
       'a.module.scss': '',
     });
@@ -153,16 +146,7 @@ describe('resolveSassSpecifier', () => {
 
     const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), './missing', resolver);
 
-    expect.assert(result.ok === false);
-    expect(result.reason).toBe('not-found');
-    expect(result.candidates).toEqual([
-      './missing.scss',
-      './_missing.scss',
-      './missing.css',
-      './_missing.css',
-      './missing/index.scss',
-      './missing/_index.scss',
-    ]);
+    expect(result).toEqual({ ok: false });
   });
 
   test('resolves a bare specifier into node_modules', async () => {
@@ -217,8 +201,7 @@ describe('resolveSassSpecifier', () => {
 
     const result = resolveSassSpecifier(fixture.getPath('a.module.scss'), 'pkg', resolver);
 
-    expect.assert(result.ok === false);
-    expect(result.reason).toBe('not-found');
+    expect(result).toEqual({ ok: false });
   });
 
   test('resolves via a load path', async () => {
@@ -279,7 +262,7 @@ describe('resolveSassSpecifier', () => {
     expect(result).toEqual({ ok: true, path: fixture.getPath('node_modules/pkg/_theme.scss') });
   });
 
-  test('reports ambiguity within a load path directory', async () => {
+  test('prefers the partial within a load path directory when both files exist', async () => {
     await using fixture = await createFixture({
       'a.module.scss': '',
       'styles': {
@@ -293,10 +276,6 @@ describe('resolveSassSpecifier', () => {
       fixture.getPath('styles'),
     ]);
 
-    expect.assert(result.ok === false);
-    expect(result.reason).toBe('ambiguous');
-    expect(result.candidates.sort()).toEqual(
-      [fixture.getPath('styles/_theme.scss'), fixture.getPath('styles/theme.scss')].sort(),
-    );
+    expect(result).toEqual({ ok: true, path: fixture.getPath('styles/_theme.scss') });
   });
 });

@@ -1,4 +1,4 @@
-import { dirname } from 'node:path';
+import { dirname, posix } from 'node:path';
 import { ResolverFactory } from 'oxc-resolver';
 import type { AtRule, Root } from 'postcss';
 import { isPlainCssImport } from './classify.ts';
@@ -102,112 +102,54 @@ export function extractImportStatements(root: Root, file: string): ImportStateme
   return statements;
 }
 
-/** basename with an underscore prefix (Sass partial naming convention). Only ever applied to the basename, not the directory part. */
-function partialOf(base: string): string {
-  return `_${base}`;
-}
-
-/** Splits a specifier into its directory prefix (including any trailing `/`) and basename. */
-function splitDirAndBase(specifier: string): { readonly dir: string; readonly base: string } {
-  const lastSlash = specifier.lastIndexOf('/');
-  if (lastSlash === -1) return { dir: '', base: specifier };
-  return { dir: specifier.slice(0, lastSlash + 1), base: specifier.slice(lastSlash + 1) };
-}
-
 /**
- * Expands a Sass module specifier into the file names Sass would try, in resolution order
- * (design doc §5.1, "candidate 展開"). The underscore of the partial-file convention is only
- * ever added to the basename, never to a directory segment.
- *
- * - No extension: tier 1 tries `name.scss` / `_name.scss` / `name.css` / `_name.css`; tier 2
- *   (only tried if tier 1 matches nothing) tries `name/index.scss` / `name/_index.scss`.
- * - `.scss`/`.css` extension given: only the exact path and its partial variant are tried.
+ * The resolver requests to try for a Sass specifier, in order — a port of sass-loader's
+ * `getPossibleRequests` (utils.js at webpack/sass-loader@0e793b0), minus the legacy
+ * `@import`-only `.import` convention. Only the partial `_` prefix is expanded here; the
+ * extension-less form and directory references are delegated to the resolver's `extensions`
+ * and `mainFiles` options ({@link createSassResolver}). The underscore is only ever added to
+ * the basename, never to a directory segment.
  */
-export function expandSassCandidates(specifier: string): {
-  readonly fileCandidates: string[];
-  readonly indexCandidates: string[];
-} {
-  const { dir, base } = splitDirAndBase(specifier);
+export function possibleRequestsOf(specifier: string): string[] {
+  // Sass compiles `.css`-suffixed specifiers as references to plain CSS files: no partial variant.
+  if (posix.extname(specifier).toLowerCase() === '.css') return [specifier];
 
-  if (base.endsWith('.scss') || base.endsWith('.css')) {
-    return { fileCandidates: [specifier, `${dir}${partialOf(base)}`], indexCandidates: [] };
-  }
-
-  return {
-    fileCandidates: [
-      `${dir}${base}.scss`,
-      `${dir}${partialOf(base)}.scss`,
-      `${dir}${base}.css`,
-      `${dir}${partialOf(base)}.css`,
-    ],
-    indexCandidates: [`${dir}${base}/index.scss`, `${dir}${base}/_index.scss`],
-  };
+  const dir = posix.dirname(specifier);
+  const prefix = dir === '.' ? '' : `${dir}/`;
+  const base = posix.basename(specifier);
+  return [...new Set([`${prefix}_${base}`, `${prefix}${base}`])];
 }
 
-export type ResolveResult =
-  | { readonly ok: true; readonly path: string }
-  | { readonly ok: false; readonly reason: 'not-found' | 'ambiguous'; readonly candidates: string[] };
+export type ResolveResult = { readonly ok: true; readonly path: string } | { readonly ok: false };
 
 /**
- * Creates the resolver shared by all Sass specifier resolution. The `sass`/`style` main fields
- * and export conditions follow sass-loader's enhanced-resolve configuration, so bare specifiers
- * resolve into node_modules packages the way bundlers resolve them.
+ * Creates the resolver shared by all Sass specifier resolution, configured like sass-loader's
+ * enhanced-resolve resolver (utils.js at webpack/sass-loader@0e793b0), minus `.sass` (out of
+ * scope): extension-less specifiers, directory references (`_index`/`index`), relative-first
+ * ordering for bare specifiers, and package entries (`sass`/`style` fields and export
+ * conditions) are all handled by the resolver. `restrictions` rejects resolutions to
+ * non-Sass-loadable files, e.g. a package `main` pointing at `.js` (fail-closed).
  */
 export function createSassResolver(): ResolverFactory {
   return new ResolverFactory({
-    extensions: [],
+    extensions: ['.scss', '.css'],
+    mainFiles: ['_index', 'index'],
+    preferRelative: true,
     modules: ['node_modules'],
-    mainFields: ['sass', 'style'],
+    mainFields: ['sass', 'style', 'main'],
     conditionNames: ['sass', 'style'],
+    restrictions: [{ regex: '\\.s?css$' }],
   });
 }
 
-/** A specifier that is neither relative nor absolute, i.e. subject to node_modules resolution. */
-function isBareSpecifier(specifier: string): boolean {
-  return !specifier.startsWith('./') && !specifier.startsWith('../') && !specifier.startsWith('/');
-}
-
 /**
- * Tries the candidate tiers of one resolution mechanism from `dir`. Returns the single match of
- * the first tier that matches anything, `ambiguous` when that tier matches several distinct files
- * (fail-closed, mirroring Sass's own error for e.g. `theme.scss` and `_theme.scss` coexisting),
- * or `undefined` when nothing matches so the caller can fall through to the next mechanism.
- */
-function resolveMechanism(
-  dir: string,
-  tiers: readonly (readonly string[])[],
-  requestOf: (candidate: string) => string,
-  resolver: ResolverFactory,
-): ResolveResult | undefined {
-  for (const tier of tiers) {
-    const resolved = new Set<string>();
-    for (const candidate of tier) {
-      const result = resolver.sync(dir, requestOf(candidate));
-      // A resolved path that is not a Sass-loadable file (e.g. a package entry pointing at
-      // `.js`) is not a match (fail-closed guard for package-entry resolution).
-      if (result.path !== undefined && (result.path.endsWith('.scss') || result.path.endsWith('.css'))) {
-        resolved.add(result.path);
-      }
-    }
-    const paths = [...resolved];
-    if (paths.length === 1) return { ok: true, path: paths[0] };
-    if (paths.length > 1) return { ok: false, reason: 'ambiguous', candidates: paths };
-  }
-  return undefined;
-}
-
-/**
- * Resolves a Sass module specifier through three mechanisms, first match wins (matching the
- * Sass JS API's importer order: current importer → importers → loadPaths):
- *
- * 1. relative to `importer` (Sass is relative-first),
- * 2. for bare specifiers only: node_modules, the way bundlers resolve them — the raw specifier
- *    is its own tier so `@use 'pkg'` can resolve through package.json's `sass`/`style` entry,
- * 3. each directory in `loadPaths` in order (dart-sass loadPaths equivalent).
- *
- * Within a mechanism, candidates are tried tier by tier ({@link expandSassCandidates}): once a
- * tier matches at least one file, later tiers are not tried, and multiple distinct matches
- * within a tier are `ambiguous` (fail-closed).
+ * Resolves a Sass module specifier by trying {@link possibleRequestsOf} in order, first match
+ * wins: the resolver's `preferRelative` covers importer-relative then node_modules resolution
+ * (matching the bundler resolution order verified for vite and turbopack, design doc §14), and
+ * each `loadPaths` directory is tried afterwards (dart-sass loadPaths equivalent). Ambiguity
+ * (e.g. `theme.scss` and `_theme.scss` coexisting) is not detected: such projects fail to build
+ * with sass itself, so they are outside the working-codebase assumption (design doc §3, principle
+ * 4) — the partial request comes first, like sass-loader.
  */
 export function resolveSassSpecifier(
   importer: string,
@@ -215,23 +157,22 @@ export function resolveSassSpecifier(
   resolver: ResolverFactory,
   loadPaths: readonly string[] = [],
 ): ResolveResult {
-  const { fileCandidates, indexCandidates } = expandSassCandidates(specifier);
-  const relativeTiers = [fileCandidates, indexCandidates];
-  const asRelativeRequest = (candidate: string): string => `./${candidate}`;
+  const requests = possibleRequestsOf(specifier);
+  const importerDir = dirname(importer);
 
-  const relative = resolveMechanism(dirname(importer), relativeTiers, asRelativeRequest, resolver);
-  if (relative) return relative;
-
-  if (isBareSpecifier(specifier)) {
-    const nodeModulesTiers = [fileCandidates, [specifier], indexCandidates];
-    const fromNodeModules = resolveMechanism(dirname(importer), nodeModulesTiers, (candidate) => candidate, resolver);
-    if (fromNodeModules) return fromNodeModules;
+  for (const request of requests) {
+    const result = resolver.sync(importerDir, request);
+    if (result.path !== undefined) return { ok: true, path: result.path };
   }
 
   for (const loadPath of loadPaths) {
-    const fromLoadPath = resolveMechanism(loadPath, relativeTiers, asRelativeRequest, resolver);
-    if (fromLoadPath) return fromLoadPath;
+    for (const request of requests) {
+      // The `./` prefix forces relative resolution: a load path lookup must not fall through
+      // to node_modules again.
+      const result = resolver.sync(loadPath, `./${request}`);
+      if (result.path !== undefined) return { ok: true, path: result.path };
+    }
   }
 
-  return { ok: false, reason: 'not-found', candidates: [...fileCandidates, ...indexCandidates] };
+  return { ok: false };
 }
