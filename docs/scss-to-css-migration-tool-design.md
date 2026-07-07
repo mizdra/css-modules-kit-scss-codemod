@@ -93,7 +93,7 @@ dart-sass、resolver、各 postcss プラグインは dependencies (`^x.y.z`) �
 
 module graph は、対象 glob に含まれる各ファイルの AST から `@use`・`@forward`・Sass `@import` を抽出し、bundler-compatible resolver で specifier を解決して importer から imported への edge を構築する。resolver の実装と設定はレポートに記録する。対象 glob の範囲外、`--exclude` に一致する、または `node_modules` 配下にある参照先は graph 上に存在しないものとして無視し、そのファイルを解析・変換しない。
 
-specifier の解決順は (1) importer からの相対解決 → (2) bare specifier (`./`・`../`・`/` で始まらない) のみ node_modules 解決 → (3) `--load-path <dir>` で指定した各ディレクトリからの解決、で first-match-wins とする。この順序は Sass JS API の current importer → importers → loadPaths の解決順に対応する ((2) は、scss-codemod のユーザは bundler を使う前提であるため、sass-loader などの bundler 連携 importer と同様に node_modules からも解決するもの)。node_modules 解決は oxc-resolver の `modules: ['node_modules']`・`mainFields: ['sass', 'style']`・`conditionNames: ['sass', 'style']` (sass-loader の enhanced-resolve 設定に準拠) で行い、通常の candidate に加えて raw specifier そのもの (`@use 'pkg'` → package.json の sass/style field 経由) も試す。解決結果が `.scss`/`.css` で終わらない場合は match とみなさない (fail-closed)。`--load-path` は dart-sass の loadPaths 相当。
+specifier の解決順は (1) importer からの相対解決 → (2) bare specifier (`./`・`../`・`/` で始まらない) のみ node_modules 解決 → (3) `--load-path <dir>` で指定した各ディレクトリからの解決、で first-match-wins とする。この順序は vite + sass / Next.js (turbopack) + sass の実験で確認した両 bundler の実際の解決順と一致し (2026-07-07 の実験。[§14](#14-参考一次情報))、Sass JS API の current importer → importers → loadPaths の解決順にも対応する ((2) は、scss-codemod のユーザは bundler を使う前提であるため、sass-loader などの bundler 連携 importer と同様に node_modules からも解決するもの)。node_modules 解決は oxc-resolver の `modules: ['node_modules']`・`mainFields: ['sass', 'style']`・`conditionNames: ['sass', 'style']` (sass-loader の enhanced-resolve 設定に準拠) で行い、通常の candidate に加えて raw specifier そのもの (`@use 'pkg'` → package.json の sass/style field 経由) も試す。解決結果が `.scss`/`.css` で終わらない場合は match とみなさない (fail-closed)。`--load-path` は dart-sass の loadPaths 相当。
 
 ### 5.2 値の形の静的検査
 
@@ -382,7 +382,7 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 
 ## 14. 参考一次情報
 
-設計の根拠にした一次情報。事実は 2026-07-06 に一次情報・実験で検証した。
+設計の根拠にした一次情報。検証日は各項目に記載 (無印は 2026-07-06)。
 
 - **sass-parser**: [npm: sass-parser](https://www.npmjs.com/package/sass-parser) — production 不適・raws 未対応の警告。リポジトリは [sass/dart-sass の `pkg/sass-parser`](https://github.com/sass/dart-sass)。
 - **Lightning CSS の `@value` 非対応**: [CSS Modules – Lightning CSS](https://lightningcss.dev/css-modules.html)、[parcel-bundler/lightningcss#659](https://github.com/parcel-bundler/lightningcss/issues/659)。
@@ -393,5 +393,6 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 - **vite の Sass `@use` の per-entry 複製 (ソースコード + 実験、2026-07-06、vite@a1d73a3 / 8.1.3)**: `packages/vite/src/node/plugins/css.ts` — transform フックがファイル単位で `compileCSS` を呼び (L366-373, L433)、`makeScssWorker` が 1 ファイルごとに `compileStringAsync` を実行 (L2610)。実験: `_shared.scss` を 3 つの `.module.scss` から `@use` → dist に `.shared` が 3 回複製 (ハッシュは importer ごとに別)。単一ファイル内の `@use ... as s1; @use ... as s2;` は 1 回のみ。
 - **vite の CSS `@import` (ソースコード + 実験、2026-07-06)**: postcss-import による per-importer インライン展開 (css.ts L1543, L1566-1568)、build は連結のみで重複排除なし (L621, L694)。実験: 4 importer → 4 回複製。
 - **turbopack の CSS `@import` (ソースコード調査、2026-07-06、vercel/next.js@901c0803)**: `turbopack/crates/turbopack-css/src/references/mod.rs` (`@import` → `ImportAssetReference` 化しルール除去)、`references/import.rs` (`ChunkingType::Parallel`)、`turbopack-core/src/chunk/chunk_group.rs` (モジュール単位の重複排除)。
+- **bundler + sass の specifier 解決順 (自前実験、2026-07-07、vite@8.1.1 / next@16.2.9 (Turbopack) / sass@1.101.0)**: `@use` の specifier が相対・node_modules・loadPaths の複数箇所に解決し得る衝突 fixture (候補ごとに一意なマーカー selector を持たせ、ビルド出力 CSS に残るもので勝者を判定) を両 bundler でビルド。どちらも**相対 → node_modules (bare specifier のみ) → loadPaths** の first-match-wins で完全一致 ([§5.1](#51-パーサー構成) の解決順の根拠)。node_modules 側の fixture は package.json `sass` field と `index.scss`/`_index.scss` を同一マーカーで併置しており、機構間の順序は確定するが node_modules 内の entry 形式ごとの優先順はこの実験では判別していない。bare specifier の node_modules 解決・loadPaths は単体でも両者で機能。付随して確認: turbopack (next@16.2.9) では `sassOptions.includePaths` は相対・絶対とも効かず、dart-sass modern API のオプション名である `loadPaths` のみ有効。
 - **Sass 言語仕様**: [Comments](https://sass-lang.com/documentation/syntax/comments/)、[@error](https://sass-lang.com/documentation/at-rules/error/)、[Variables](https://sass-lang.com/documentation/variables/)、[@use](https://sass-lang.com/documentation/at-rules/use/)、[@import is deprecated](https://sass-lang.com/blog/import-is-deprecated/)。
 - **CMK**: [README](https://github.com/mizdra/css-modules-kit-scss-codemod/blob/main/README.md/README.md)、[AGENTS.md](https://github.com/mizdra/css-modules-kit-scss-codemod/blob/main/AGENTS.md) (トークン・all token importer の定義)。
