@@ -46,6 +46,15 @@ describe('extractImportStatements', () => {
     ]);
   });
 
+  test('does not split on a comma inside a quoted specifier containing an escaped quote', () => {
+    const source = `@import 'a\\',b', 'c';\n`;
+
+    expect(statementsOf(source)).toEqual([
+      { kind: 'import', specifier: "a\\',b", file: FILE, line: 1, column: 1 },
+      { kind: 'import', specifier: 'c', file: FILE, line: 1, column: 1 },
+    ]);
+  });
+
   test('skips sass: built-in modules and pkg: specifiers', () => {
     const source = dedent`
       @use 'sass:math';

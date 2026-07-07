@@ -39,9 +39,18 @@ function splitImportEntries(params: string): string[] {
   const entries: string[] = [];
   let current = '';
   let quote: string | undefined;
+  let escaped = false;
   for (const char of params) {
     if (quote !== undefined) {
       current += char;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
       if (char === quote) quote = undefined;
       continue;
     }
