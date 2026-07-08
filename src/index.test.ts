@@ -69,10 +69,10 @@ test('returns a usage error when convert is given no patterns', async () => {
   expect(result.exitCode).toBe(2);
 });
 
-test('returns not implemented for convert to-css (an M0 stage without a transform yet)', async () => {
-  const result = await run(['convert', 'to-css', 'x']);
-  expect(result.exitCode).toBe(1);
-  expect(result.stderr).toContain('not implemented');
+test('reports no matching files for convert to-css when the pattern matches nothing (to-css is implemented, unlike other M0-listed-but-unimplemented stages)', async () => {
+  const result = await run(['convert', 'to-css', 'no-such-pattern/**/*.scss']);
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr).toContain('no files matched');
 });
 
 test('returns M1 planned for convert expressions', async () => {
@@ -98,13 +98,13 @@ test('returns M1 planned for verify', async () => {
   expect(result.stderr).toContain('M1');
 });
 
-test('returns not implemented for todo', async () => {
-  const result = await run(['todo', 'x']);
-  expect(result.exitCode).toBe(1);
-  expect(result.stderr).toContain('not implemented');
+test('reports no matching files for todo when the pattern matches nothing (todo is implemented)', async () => {
+  const result = await run(['todo', 'no-such-pattern/**/*.scss']);
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr).toContain('no files matched');
 });
 
 test('accepts a --json option on todo', async () => {
-  const result = await run(['todo', '--json', 'x']);
-  expect(result.exitCode).toBe(1);
+  const result = await run(['todo', '--json', 'no-such-pattern/**/*.scss']);
+  expect(result.exitCode).toBe(2);
 });

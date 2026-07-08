@@ -3,7 +3,7 @@
 - Status: 実装中 (M0。進捗は [§13.2](#132-実装チェックリスト-m0) を参照)
 - 対象リポジトリ: `mizdra/css-modules-kit-scss-codemod` (独立リポジトリ)
 - パッケージ名: `@css-modules-kit/scss-codemod`
-- 最終更新: 2026-07-07
+- 最終更新: 2026-07-08
 
 ## 1. 概要
 
@@ -369,18 +369,18 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 - [x] **Step 7: core/sass-compile** — dart-sass (`sass` を dependencies に追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定 (23d81b6)
 - [x] **Step 8: commands/analyze 統合** — Step 2–7 を組み合わせ、人間向け出力と `--json` を実装。project fixture (複数ファイル構成) による e2e テスト (ef48424)
 
-#### PR2: Phase 1 stages
+#### PR2: Phase 1 stages (ブランチ: `m0-phase1-stages`)
 
-- [ ] **Step 9: core/write** — アトミック書き込み (メモリ上で全件成功 → 同一ディレクトリの temp file 経由で置換 → I/O エラー時は best-effort ロールバック。[§7](#7-cli-設計))。atomicity のテスト ([§13.1](#131-テスト戦略))
-- [ ] **Step 10: `comments` stage** — `//` → `/* */` (postcss-scss の inline comment)。コメント内に `*/` を含む場合の扱いをテストで固定
-- [ ] **Step 11: `at-statements` stage** — `@error`/`@warn`/`@debug` を除去し、内容をログへ
+- [x] **Step 9: core/write** — アトミック書き込み (メモリ上で全件成功 → 同一ディレクトリの temp file 経由で置換 → I/O エラー時は best-effort ロールバック。[§7](#7-cli-設計))。atomicity のテスト ([§13.1](#131-テスト戦略)) (ebdc073)
+- [x] **Step 10: `comments` stage** — `//` → `/* */` (postcss-scss の inline comment)。コメント内に `*/` を含む場合の扱いをテストで固定 (`*/` → `* /` に置換して包む) (bec390e)
+- [x] **Step 11: `at-statements` stage** — `@error`/`@warn`/`@debug` を除去し、内容をログへ (172add0)
 - ~~**Step 12: `nesting` stage**~~ — 方針転換により削除 (2026-07-07)。`&` 連結の脱糖は css-codemod の責務とし、scss-codemod は連結を無変換で通す ([§6](#6-対応する-sass-構文)、[§12](#12-css-codemod-との境界))
 
-#### PR3: to-css + todo
+#### PR3: to-css + todo (ブランチ: `m0-to-css-todo`)
 
-- [ ] **Step 13: dialect-validator** — 変換先 PostCSS 方言の whitelist 検査 + プラグイン列 (postcss-mixins → simple-vars → nested) の実行結果が標準 CSS としてパースできることの確認 ([§8.3](#83-precondition-検査とエラー処理))
-- [ ] **Step 14: `to-css` stage** — precondition (Step 13 に合格) → `.module.scss`→`.module.css`・`_x.scss`→`x.css` リネーム → TS/JS の import specifier 書き換え → ビルド設定切替の案内
-- [ ] **Step 15: `todo` コマンド** — 変換できない箇所の位置・構文名・理由・手動変換ヒントを markdown プロンプト形式と `--json` で出力 ([§11](#11-todo-変換できない箇所の洗い出し))
+- [x] **Step 13: dialect-validator** — 変換先 PostCSS 方言の whitelist 検査 + プラグイン列 (postcss-mixins → simple-vars → nested) の実行結果が標準 CSS としてパースできることの確認 ([§8.3](#83-precondition-検査とエラー処理)) (c66eae6)
+- [x] **Step 14: `to-css` stage** — precondition (Step 13 に合格) → `.module.scss`→`.module.css`・`_x.scss`→`x.css` リネーム → TS/JS の import specifier 書き換え → ビルド設定切替の案内 (6de5c18)
+- [x] **Step 15: `todo` コマンド** — 変換できない箇所の位置・構文名・理由・手動変換ヒントを markdown プロンプト形式と `--json` で出力 ([§11](#11-todo-変換できない箇所の洗い出し)) (04a22ea)
 
 ## 14. 参考一次情報
 

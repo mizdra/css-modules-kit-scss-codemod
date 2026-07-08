@@ -23,7 +23,8 @@ function formatLocation(diagnostic: Diagnostic): string {
   return `${diagnostic.file}:${diagnostic.line}:${diagnostic.column}`;
 }
 
-function formatMilestone(milestone: DiagnosticMilestone): string {
+/** Renders a milestone as the human-facing label used in diagnostic suffixes and the `todo` report. */
+export function formatMilestone(milestone: DiagnosticMilestone): string {
   return milestone === 'never' ? 'no support planned' : `planned: ${milestone}`;
 }
 

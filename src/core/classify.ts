@@ -29,7 +29,8 @@ export interface SyntaxFinding {
 
 const SINGLE_VARIABLE_BODY = /^\$[\w-]+$/u;
 
-const KNOWN_CSS_AT_RULES: ReadonlySet<string> = new Set([
+/** CSS at-rules recognized by the whitelist (also reused by `core/dialect-validator`). */
+export const KNOWN_CSS_AT_RULES: ReadonlySet<string> = new Set([
   'media',
   'supports',
   'keyframes',

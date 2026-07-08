@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { runAnalyzeCommand } from './commands/analyze.ts';
 import { runConvertCommand } from './commands/convert.ts';
+import { runTodoCommand } from './commands/todo.ts';
 import type { CliIo } from './io.ts';
 import { parseAliasArgs, parseCommandArgs } from './parse-args.ts';
 import { findStage, STAGE_NAMES } from './stages.ts';
@@ -112,7 +113,7 @@ function runVerify(args: string[], io: CliIo): number {
   return notImplemented(io, 'scss-codemod verify: planned for M1.');
 }
 
-function runTodo(args: string[], io: CliIo): number {
+async function runTodo(args: string[], io: CliIo): Promise<number> {
   const parsed = parseCommandArgs('todo', args, {
     'exclude': { type: 'string', multiple: true },
     'load-path': { type: 'string', multiple: true },
@@ -123,7 +124,22 @@ function runTodo(args: string[], io: CliIo): number {
   if (parsed.positionals.length === 0) {
     return usageError(io, 'scss-codemod todo: missing <patterns...>');
   }
-  return notImplemented(io, 'The "todo" command is not implemented yet.');
+
+  const cwd = io.cwd ?? process.cwd();
+  const aliasResult = parseAliasArgs(toStringArray(parsed.values.alias), cwd);
+  if (!aliasResult.ok) return usageError(io, aliasResult.message);
+  const loadPaths = toStringArray(parsed.values['load-path']).map((loadPath) => resolve(cwd, loadPath));
+
+  return runTodoCommand(
+    {
+      patterns: parsed.positionals,
+      exclude: toStringArray(parsed.values.exclude),
+      loadPaths,
+      alias: aliasResult.alias,
+      json: parsed.values.json === true,
+    },
+    io,
+  );
 }
 
 export async function runCli(argv: string[], io: CliIo): Promise<number> {
@@ -144,7 +160,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     case 'verify':
       return runVerify(rest, io);
     case 'todo':
-      return runTodo(rest, io);
+      return await runTodo(rest, io);
     default:
       return usageError(io, `scss-codemod: unknown command "${command}"`);
   }
