@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { runAnalyzeCommand } from './commands/analyze.ts';
+import { runConvertCommand } from './commands/convert.ts';
 import type { CliIo } from './io.ts';
 import { parseAliasArgs, parseCommandArgs } from './parse-args.ts';
 import { findStage, STAGE_NAMES } from './stages.ts';
@@ -58,7 +59,7 @@ async function runAnalyze(args: string[], io: CliIo): Promise<number> {
   );
 }
 
-function runConvert(args: string[], io: CliIo): number {
+async function runConvert(args: string[], io: CliIo): Promise<number> {
   const parsed = parseCommandArgs('convert', args, {
     'exclude': { type: 'string', multiple: true },
     'load-path': { type: 'string', multiple: true },
@@ -80,10 +81,21 @@ function runConvert(args: string[], io: CliIo): number {
     return usageError(io, 'scss-codemod convert: missing <patterns...>');
   }
 
-  if (stageInfo.milestone === 'M0') {
-    return notImplemented(io, `scss-codemod convert ${stage}: not implemented yet.`);
-  }
-  return notImplemented(io, `scss-codemod convert ${stage}: planned for ${stageInfo.milestone}.`);
+  const cwd = io.cwd ?? process.cwd();
+  const aliasResult = parseAliasArgs(toStringArray(parsed.values.alias), cwd);
+  if (!aliasResult.ok) return usageError(io, aliasResult.message);
+  const loadPaths = toStringArray(parsed.values['load-path']).map((loadPath) => resolve(cwd, loadPath));
+
+  return runConvertCommand(
+    {
+      stage: stageInfo,
+      patterns,
+      exclude: toStringArray(parsed.values.exclude),
+      loadPaths,
+      alias: aliasResult.alias,
+    },
+    io,
+  );
 }
 
 function runVerify(args: string[], io: CliIo): number {
@@ -128,7 +140,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     case 'analyze':
       return await runAnalyze(rest, io);
     case 'convert':
-      return runConvert(rest, io);
+      return await runConvert(rest, io);
     case 'verify':
       return runVerify(rest, io);
     case 'todo':
