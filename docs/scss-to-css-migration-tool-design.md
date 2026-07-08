@@ -365,9 +365,9 @@ M0 は 3 PR に分割して実装する。1 ステップ = 1 commit、各ステ�
 - [x] **Step 3: core/parse** — postcss-scss ラッパ。パース失敗の Diagnostic 化。postcss / postcss-scss を dependencies に追加 ([§5.1](#51-パーサー構成)) (26ac783)
 - [x] **Step 4: core/classify (構文分類 = whitelist 判定)** — AST 走査で各ノード・値を [§6](#6-対応する-sass-構文) の表に分類 (無変換 OK / stage で変換 / エラー = todo 対象)。値の中の検査は postcss-value-parser。reject フィクスチャで回帰検知 (c67d801)
 - [x] **Step 5: core/resolve + core/module-graph** — `@use`/`@forward`/Sass `@import` の specifier 抽出 → sass-loader 方式の `_` 展開 + oxc-resolver で解決 (相対 → node_modules → `--load-path` の順)。対象 glob 範囲外・`--exclude` 一致・`node_modules` 配下の参照先は無視 ([§5.1](#51-パーサー構成)) (853a55e, 93e7f77, 6bb7d73, 2207e3d)
-- [ ] **Step 6: core/partial** — partial 分類 (definition-only / style-emitting / mixed。[§9.1](#91-partial-の検出と分類))
-- [ ] **Step 7: core/sass-compile** — dart-sass (`sass` を dependencies に追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定
-- [ ] **Step 8: commands/analyze 統合** — Step 2–7 を組み合わせ、人間向け出力と `--json` を実装。project fixture (複数ファイル構成) による e2e テスト
+- [x] **Step 6: core/partial** — partial 分類 (definition-only / style-emitting / mixed。[§9.1](#91-partial-の検出と分類)) (2e06527)
+- [x] **Step 7: core/sass-compile** — dart-sass (`sass` を dependencies に追加) の compileAsync ラッパ。root ファイル (非 partial) のコンパイル可否を判定 (23d81b6)
+- [x] **Step 8: commands/analyze 統合** — Step 2–7 を組み合わせ、人間向け出力と `--json` を実装。project fixture (複数ファイル構成) による e2e テスト (ef48424)
 
 #### PR2: Phase 1 stages
 

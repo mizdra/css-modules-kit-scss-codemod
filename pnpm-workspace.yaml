@@ -1,3 +1,7 @@
+allowBuilds:
+  # Only used by sass's optional `chokidar`-based CLI --watch mode, which this codemod never
+  # invokes (it calls the sass JS API directly). Deny the native build script.
+  '@parcel/watcher': false
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.2
   vite-plus: 0.2.2
